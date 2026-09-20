@@ -2,30 +2,23 @@ import SwiftUI
 
 struct QRCreationSheet: View {
 
+    private enum Field: Hashable {
+        case website
+        case contactName, contactPhone, contactEmail, contactOrganization
+        case wifiSSID, wifiPasswordSecure, wifiPasswordPlain
+        case emailAddress, emailSubject, emailBody
+        case smsNumber, smsMessage
+        case latitude, longitude
+    }
+
     let type: QRType
+    @Bindable var viewModel: GeneratorViewModel
 
     @Environment(\.dismiss) private var dismiss
 
-    @State private var website = ""
-    @State private var contactName = ""
-    @State private var contactPhone = ""
-    @State private var contactEmail = ""
-    @State private var contactOrganization = ""
-    @State private var wifiSSID = ""
-    @State private var wifiPassword = ""
-    @State private var wifiSecurity = "WPA/WPA2"
-    @State private var wifiHidden = false
     @State private var showPassword = false
-    @State private var emailAddress = ""
-    @State private var emailSubject = ""
-    @State private var emailBody = ""
-    @State private var smsNumber = ""
-    @State private var smsMessage = ""
-    @State private var latitude = ""
-    @State private var longitude = ""
     @State private var correction = "M"
-    @State private var paletteName = "Classic"
-    @State private var moduleName = "Square"
+    @FocusState private var focusedField: Field?
 
     var body: some View {
         NavigationStack {
@@ -33,7 +26,7 @@ struct QRCreationSheet: View {
                 fieldsSection
 
                 Section {
-                    Text(paletteName)
+                    Text("Classic")
                         .foregroundStyle(.secondary)
                 } header: {
                     Text("Colour")
@@ -42,7 +35,7 @@ struct QRCreationSheet: View {
                 }
 
                 Section {
-                    Text(moduleName)
+                    Text("Square")
                         .foregroundStyle(.secondary)
                 } header: {
                     Text("Shape")
@@ -90,14 +83,22 @@ struct QRCreationSheet: View {
                 }
                 ToolbarItem(placement: .bottomBar) {
                     Button {
+                        focusedField = nil
+                        viewModel.generate()
                         dismiss()
                     } label: {
                         Text("Create QR code")
                             .frame(maxWidth: .infinity)
                     }
+                    .disabled(!viewModel.canGenerate)
                 }
             }
             .scrollDismissesKeyboard(.interactively)
+            .onAppear { viewModel.type = type }
+            .onChange(of: viewModel.input.wifiSecurity) { _, _ in
+                focusedField = nil
+                showPassword = false
+            }
         }
     }
 
@@ -106,73 +107,109 @@ struct QRCreationSheet: View {
         Section {
             switch type {
             case .website:
-                TextField("Website address", text: $website)
+                TextField("Website address", text: $viewModel.input.website)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .keyboardType(.URL)
+                    .focused($focusedField, equals: .website)
 
             case .contact:
-                TextField("Name", text: $contactName)
-                TextField("Phone", text: $contactPhone)
+                TextField("Name", text: $viewModel.input.contactName)
+                    .focused($focusedField, equals: .contactName)
+                TextField("Phone", text: $viewModel.input.contactPhone)
                     .keyboardType(.phonePad)
-                TextField("Email", text: $contactEmail)
+                    .focused($focusedField, equals: .contactPhone)
+                TextField("Email", text: $viewModel.input.contactEmail)
                     .keyboardType(.emailAddress)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
-                TextField("Company (optional)", text: $contactOrganization)
+                    .focused($focusedField, equals: .contactEmail)
+                TextField("Company (optional)", text: $viewModel.input.contactOrganization)
+                    .focused($focusedField, equals: .contactOrganization)
 
             case .wifi:
-                TextField("Network name (SSID)", text: $wifiSSID)
+                TextField("Network name (SSID)", text: $viewModel.input.wifiSSID)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
+                    .focused($focusedField, equals: .wifiSSID)
 
-                if wifiSecurity != "None" {
-                    if showPassword {
-                        TextField("Password", text: $wifiPassword)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                    } else {
-                        SecureField("Password", text: $wifiPassword)
+                if viewModel.input.wifiSecurity != .open {
+                    passwordField
+                }
+
+                Picker("Security", selection: $viewModel.input.wifiSecurity) {
+                    ForEach(WiFiSecurity.allCases) { security in
+                        Text(security.title).tag(security)
                     }
-
-                    Toggle("Show password", isOn: $showPassword)
                 }
 
-                Picker("Security", selection: $wifiSecurity) {
-                    Text("WPA/WPA2").tag("WPA/WPA2")
-                    Text("WEP").tag("WEP")
-                    Text("None").tag("None")
-                }
-
-                Toggle("Hidden network", isOn: $wifiHidden)
+                Toggle("Hidden network", isOn: $viewModel.input.wifiHidden)
 
             case .email:
-                TextField("Email address", text: $emailAddress)
+                TextField("Email address", text: $viewModel.input.emailAddress)
                     .keyboardType(.emailAddress)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
-                TextField("Subject (optional)", text: $emailSubject)
-                TextField("Message (optional)", text: $emailBody, axis: .vertical)
+                    .focused($focusedField, equals: .emailAddress)
+                TextField("Subject (optional)", text: $viewModel.input.emailSubject)
+                    .focused($focusedField, equals: .emailSubject)
+                TextField("Message (optional)", text: $viewModel.input.emailBody, axis: .vertical)
                     .lineLimit(3...6)
+                    .focused($focusedField, equals: .emailBody)
 
             case .sms:
-                TextField("Phone number", text: $smsNumber)
+                TextField("Phone number", text: $viewModel.input.smsNumber)
                     .keyboardType(.phonePad)
-                TextField("Message (optional)", text: $smsMessage, axis: .vertical)
+                    .focused($focusedField, equals: .smsNumber)
+                TextField("Message (optional)", text: $viewModel.input.smsMessage, axis: .vertical)
                     .lineLimit(3...6)
+                    .focused($focusedField, equals: .smsMessage)
 
             case .location:
-                TextField("Latitude", text: $latitude)
+                TextField("Latitude", text: $viewModel.input.latitude)
                     .keyboardType(.numbersAndPunctuation)
-                TextField("Longitude", text: $longitude)
+                    .focused($focusedField, equals: .latitude)
+                TextField("Longitude", text: $viewModel.input.longitude)
                     .keyboardType(.numbersAndPunctuation)
+                    .focused($focusedField, equals: .longitude)
             }
         } header: {
             Text("Details")
         }
     }
+
+    private var passwordField: some View {
+        HStack(spacing: 8) {
+            ZStack {
+                SecureField("Password", text: $viewModel.input.wifiPassword)
+                    .focused($focusedField, equals: .wifiPasswordSecure)
+                    .opacity(showPassword ? 0 : 1)
+                    .allowsHitTesting(!showPassword)
+
+                TextField("Password", text: $viewModel.input.wifiPassword)
+                    .focused($focusedField, equals: .wifiPasswordPlain)
+                    .opacity(showPassword ? 1 : 0)
+                    .allowsHitTesting(showPassword)
+            }
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+
+            Button {
+                let wasTyping = focusedField == .wifiPasswordSecure || focusedField == .wifiPasswordPlain
+                showPassword.toggle()
+                if wasTyping {
+                    focusedField = showPassword ? .wifiPasswordPlain : .wifiPasswordSecure
+                }
+            } label: {
+                Image(systemName: showPassword ? "eye" : "eye.slash")
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(showPassword ? "Hide password" : "Show password")
+        }
+    }
 }
 
 #Preview {
-    QRCreationSheet(type: .website)
+    QRCreationSheet(type: .website, viewModel: GeneratorViewModel())
 }

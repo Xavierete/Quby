@@ -32,3 +32,43 @@ enum QRType: String, CaseIterable, Identifiable {
         }
     }
 }
+
+enum WiFiSecurity: String, CaseIterable, Identifiable {
+    case wpa = "WPA"
+    case wep = "WEP"
+    case open = "nopass"
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .wpa: return "WPA/WPA2"
+        case .wep: return "WEP"
+        case .open: return "None"
+        }
+    }
+}
+
+struct QRInput {
+    var website = ""
+
+    var contactName = ""
+    var contactPhone = ""
+    var contactEmail = ""
+    var contactOrganization = ""
+
+    var wifiSSID = ""
+    var wifiPassword = ""
+    var wifiSecurity: WiFiSecurity = .wpa
+    var wifiHidden = false
+
+    var emailAddress = ""
+    var emailSubject = ""
+    var emailBody = ""
+
+    var smsNumber = ""
+    var smsMessage = ""
+
+    var latitude = ""
+    var longitude = ""
+}

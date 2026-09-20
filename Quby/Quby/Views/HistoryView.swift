@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 
 private enum HistoryFavoritesFilter: String, CaseIterable, Identifiable {
     case all, favoritesOnly
@@ -47,6 +48,7 @@ private enum HistoryTypeFilter: String, CaseIterable, Identifiable {
 
 struct HistoryView: View {
 
+    @Query(sort: \CodeRecord.createdAt, order: .reverse) private var records: [CodeRecord]
     @State private var favoritesFilter: HistoryFavoritesFilter = .all
     @State private var typeFilter: HistoryTypeFilter = .all
     @State private var sortOrder: HistorySortOrder = .newest
@@ -79,6 +81,16 @@ struct HistoryView: View {
 
     private var historySidebar: some View {
         List {
+            ForEach(records) { record in
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(record.value)
+                        .lineLimit(1)
+
+                    Text(record.createdAt, format: .dateTime.day().month().hour().minute())
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
         .navigationTitle(isEditing ? "Select codes" : "History")
         .toolbarTitleDisplayMode(isEditing ? .inline : .inlineLarge)
@@ -87,7 +99,9 @@ struct HistoryView: View {
         .environment(\.editMode, $editMode)
         .toolbar { toolbarContent }
         .overlay {
-            emptyState
+            if records.isEmpty {
+                emptyState
+            }
         }
     }
 
@@ -309,4 +323,5 @@ private struct HistoryFavoritesSubmenu: View {
 
 #Preview {
     HistoryView()
+        .modelContainer(for: CodeRecord.self, inMemory: true)
 }

@@ -1,11 +1,14 @@
 import SwiftUI
 import PhotosUI
+import SwiftData
 
 struct GeneratorView: View {
 
+    @Environment(\.modelContext) private var modelContext
     @Environment(\.openWindow) private var openWindow
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
+    @State private var viewModel = GeneratorViewModel()
     @State private var activeCreationType: QRType?
     @State private var showCameraScanner = false
     @State private var showPhotoPicker = false
@@ -13,6 +16,7 @@ struct GeneratorView: View {
     @State private var contentWidth: CGFloat = 0
 
     private let gridSpacing: CGFloat = 12
+    private let resultID = "qrResult"
 
     private var opensCameraInWindow: Bool {
         ProcessInfo.processInfo.isiOSAppOnMac
@@ -29,27 +33,43 @@ struct GeneratorView: View {
     }
 
     var body: some View {
-        GeometryReader { proxyGeometry in
-            ScrollView {
-                VStack(spacing: 24) {
-                    typeButtons
+        ScrollViewReader { proxy in
+            GeometryReader { proxyGeometry in
+                ScrollView {
+                    VStack(spacing: 24) {
+                        typeButtons
 
-                    Spacer(minLength: 24)
+                        if viewModel.qrImage != nil {
+                            result
+                                .id(resultID)
+                        } else {
+                            Spacer(minLength: 24)
 
-                    emptyResult
-                        .frame(maxWidth: .infinity)
-                        .padding(.bottom, 28)
+                            emptyResult
+                                .frame(maxWidth: .infinity)
+                                .padding(.bottom, 28)
+                        }
+                    }
+                    .padding()
+                    .frame(maxWidth: .infinity, minHeight: proxyGeometry.size.height, alignment: .top)
+                    .onGeometryChange(for: CGFloat.self) { geometry in
+                        geometry.size.width
+                    } action: { width in
+                        contentWidth = width
+                    }
                 }
-                .padding()
-                .frame(maxWidth: .infinity, minHeight: proxyGeometry.size.height, alignment: .top)
-                .onGeometryChange(for: CGFloat.self) { geometry in
-                    geometry.size.width
-                } action: { width in
-                    contentWidth = width
+            }
+            .scrollDismissesKeyboard(.interactively)
+            .onChange(of: viewModel.resultVersion) { _, _ in
+                guard viewModel.qrImage != nil else { return }
+                Task {
+                    try? await Task.sleep(for: .milliseconds(80))
+                    withAnimation(.smooth(duration: 0.6)) {
+                        proxy.scrollTo(resultID, anchor: .center)
+                    }
                 }
             }
         }
-        .scrollDismissesKeyboard(.interactively)
         .navigationTitle("Create")
         .toolbarTitleDisplayMode(.inlineLarge)
         .toolbar {
@@ -71,7 +91,7 @@ struct GeneratorView: View {
             }
         }
         .sheet(item: $activeCreationType) { type in
-            QRCreationSheet(type: type)
+            QRCreationSheet(type: type, viewModel: viewModel)
                 .presentationDragIndicator(.visible)
                 .presentationSizing(.form)
         }
@@ -82,6 +102,9 @@ struct GeneratorView: View {
             }
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
+        }
+        .task {
+            viewModel.modelContext = modelContext
         }
     }
 
@@ -99,6 +122,7 @@ struct GeneratorView: View {
         return LazyVGrid(columns: typeColumns, spacing: gridSpacing) {
             ForEach(QRType.allCases) { type in
                 Button {
+                    viewModel.type = type
                     activeCreationType = type
                 } label: {
                     VStack(spacing: metrics.contentSpacing) {
@@ -132,11 +156,38 @@ struct GeneratorView: View {
     }
 
     private var emptyResult: some View {
-        ContentUnavailableView(
-            "No code yet",
-            systemImage: "qrcode",
-            description: Text("Choose a type above to get started.")
-        )
+        VStack(spacing: 12) {
+            ContentUnavailableView(
+                "No code yet",
+                systemImage: "qrcode",
+                description: Text("Choose a type above to get started.")
+            )
+
+            if let message = viewModel.message {
+                Text(message)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var result: some View {
+        VStack(spacing: 20) {
+            if let qrImage = viewModel.qrImage {
+                qrImage
+                    .resizable()
+                    .interpolation(.none)
+                    .scaledToFit()
+                    .frame(maxWidth: horizontalSizeClass == .regular ? 320 : 260,
+                           maxHeight: horizontalSizeClass == .regular ? 320 : 260)
+            }
+
+            if let message = viewModel.message {
+                Text(message)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
     }
 }
 
@@ -189,4 +240,5 @@ private struct TypeCardMetrics {
     NavigationStack {
         GeneratorView()
     }
+    .modelContainer(for: CodeRecord.self, inMemory: true)
 }
