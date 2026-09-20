@@ -44,6 +44,16 @@ private enum HistoryTypeFilter: String, CaseIterable, Identifiable {
         case .text: return "Text"
         }
     }
+
+    func matches(_ content: ScannedContent) -> Bool {
+        switch (self, content) {
+        case (.all, _), (.website, .website), (.wifi, .wifi), (.contact, .contact),
+             (.email, .email), (.sms, .sms), (.location, .location), (.text, .text):
+            return true
+        default:
+            return false
+        }
+    }
 }
 
 struct HistoryView: View {
@@ -65,16 +75,26 @@ struct HistoryView: View {
     }
 
     private var shown: [CodeRecord] {
+        let parser = ScannedContentParser()
         let sorted = sortOrder == .newest ? records : records.reversed()
         return sorted.filter { record in
             if favoritesFilter == .favoritesOnly && !record.isFavorite { return false }
 
-            if !searchText.isEmpty,
-               !record.value.localizedCaseInsensitiveContains(searchText) {
-                return false
+            let content = parser.parse(record.value)
+
+            if !searchText.isEmpty {
+                let searchable = [
+                    record.value,
+                    content.title,
+                    rowTitle(for: content, fallback: record.value)
+                ]
+                if searchable.allSatisfy({ !$0.localizedCaseInsensitiveContains(searchText) }) {
+                    return false
+                }
             }
 
-            return true
+            guard typeFilter != .all else { return true }
+            return typeFilter.matches(content)
         }
     }
 
@@ -174,13 +194,15 @@ struct HistoryView: View {
     }
 
     private func row(for record: CodeRecord) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: "qrcode")
+        let content = ScannedContentParser().parse(record.value)
+
+        return HStack(spacing: 12) {
+            Image(systemName: content.icon)
                 .foregroundStyle(.secondary)
                 .frame(width: 22)
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(record.value)
+                Text(rowTitle(for: content, fallback: record.value))
                     .lineLimit(1)
 
                 Text(record.createdAt, format: .dateTime.day().month().hour().minute())
@@ -195,6 +217,28 @@ struct HistoryView: View {
                     .symbolRenderingMode(.palette)
                     .foregroundStyle(.yellow.gradient)
             }
+        }
+    }
+
+    private func rowTitle(for content: ScannedContent, fallback: String) -> String {
+        switch content {
+        case .website(let url):
+            return url.host() ?? url.absoluteString
+        case .wifi(let ssid, _, _, _):
+            return ssid.isEmpty ? content.title : ssid
+        case .contact(let name, let phone, let email, _):
+            if !name.isEmpty { return name }
+            if !phone.isEmpty { return phone }
+            if !email.isEmpty { return email }
+            return content.title
+        case .email(let address, _, _):
+            return address.isEmpty ? content.title : address
+        case .sms(let number, _):
+            return number.isEmpty ? content.title : number
+        case .location(let latitude, let longitude):
+            return "\(latitude), \(longitude)"
+        case .text(let text):
+            return text.isEmpty ? fallback : text
         }
     }
 

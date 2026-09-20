@@ -5,6 +5,11 @@ struct CodeDetailView: View {
     let record: CodeRecord
 
     @State private var qrImage: Image?
+    @State private var showPassword = false
+
+    private var content: ScannedContent {
+        ScannedContentParser().parse(record.value)
+    }
 
     var body: some View {
         List {
@@ -27,15 +32,17 @@ struct CodeDetailView: View {
             }
 
             Section {
-                Text(record.value)
-
-                Text(record.createdAt, format: .dateTime.day().month().year().hour().minute())
-                    .foregroundStyle(.secondary)
+                details
             } header: {
-                Text("Details")
+                HStack(spacing: 8) {
+                    Image(systemName: content.icon)
+                    Text(content.title)
+                    Spacer()
+                    Text(record.createdAt, format: .dateTime.day().month().hour().minute())
+                }
             }
         }
-        .navigationTitle("Details")
+        .navigationTitle(content.title)
         .toolbarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -52,6 +59,70 @@ struct CodeDetailView: View {
         .task { makeCode() }
     }
 
+    @ViewBuilder
+    private var details: some View {
+        switch content {
+        case .website(let url):
+            row("Domain", url.host() ?? url.absoluteString)
+            row("Address", url.absoluteString)
+
+        case .wifi(let ssid, let password, let security, let isHidden):
+            row("Network", ssid)
+            if !password.isEmpty {
+                HStack {
+                    Text("Password")
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text(showPassword ? password : String(repeating: "•", count: max(password.count, 6)))
+                        .textSelection(.enabled)
+                    Button {
+                        showPassword.toggle()
+                    } label: {
+                        Image(systemName: showPassword ? "eye" : "eye.slash")
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                }
+            }
+            row("Security", security)
+            if isHidden { row("Hidden", "Yes") }
+
+        case .contact(let name, let phone, let email, let organization):
+            if !name.isEmpty { row("Name", name) }
+            if !organization.isEmpty { row("Company", organization) }
+            if !phone.isEmpty { row("Phone", phone) }
+            if !email.isEmpty { row("Email", email) }
+
+        case .email(let address, let subject, let body):
+            row("To", address)
+            if !subject.isEmpty { row("Subject", subject) }
+            if !body.isEmpty { row("Message", body) }
+
+        case .sms(let number, let message):
+            row("Number", number)
+            if !message.isEmpty { row("Message", message) }
+
+        case .location(let latitude, let longitude):
+            row("Latitude", String(latitude))
+            row("Longitude", String(longitude))
+
+        case .text(let text):
+            Text(text)
+                .textSelection(.enabled)
+        }
+    }
+
+    private func row(_ label: String, _ value: String) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(label)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text(value)
+                .multilineTextAlignment(.trailing)
+                .textSelection(.enabled)
+        }
+    }
+
     private func makeCode() {
         guard qrImage == nil,
               let image = QRCodeGenerator().makeImage(from: record.value) else { return }
@@ -61,6 +132,9 @@ struct CodeDetailView: View {
 
 #Preview {
     NavigationStack {
-        CodeDetailView(record: CodeRecord(value: "https://example.com", kind: .created))
+        CodeDetailView(record: CodeRecord(
+            value: #"WIFI:T:WPA;S:Quby Cafe;P:latte\;123;H:true;;"#,
+            kind: .created
+        ))
     }
 }
