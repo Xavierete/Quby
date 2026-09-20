@@ -1,12 +1,9 @@
-//
-//  QubyApp.swift
-//  Quby
-//
-//  Created by Xavier on 20/09/2026.
-//
-
 import SwiftUI
 import SwiftData
+
+enum QubyWindowID {
+    static let cameraScanner = "camera-scanner"
+}
 
 @main
 struct QubyApp: App {
@@ -28,5 +25,13 @@ struct QubyApp: App {
             ContentView()
         }
         .modelContainer(sharedModelContainer)
+
+        WindowGroup(id: QubyWindowID.cameraScanner) {
+            NavigationStack {
+                CameraScannerView()
+            }
+        }
+        .modelContainer(sharedModelContainer)
+        .defaultSize(width: 440, height: 680)
     }
 }

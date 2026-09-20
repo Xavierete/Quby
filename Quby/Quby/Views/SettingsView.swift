@@ -1,0 +1,101 @@
+import SwiftUI
+
+struct SettingsView: View {
+
+    @State private var scanSound = true
+    @State private var scanHaptics = true
+    @State private var showDetailsAutomatically = false
+    @State private var saveHistory = true
+    @State private var openWebsitesAutomatically = false
+    @State private var confirmClear = false
+    @State private var showGuide = false
+
+    private var version: String {
+        let dictionary = Bundle.main.infoDictionary
+        let short = dictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
+        let build = dictionary?["CFBundleVersion"] as? String ?? "1"
+        return "\(short) (\(build))"
+    }
+
+    var body: some View {
+        Form {
+            Section {
+                Toggle(isOn: $scanSound) {
+                    Label("Sound", systemImage: "speaker.wave.2")
+                }
+                Toggle(isOn: $scanHaptics) {
+                    Label("Vibration", systemImage: "iphone.radiowaves.left.and.right")
+                }
+                Toggle(isOn: $showDetailsAutomatically) {
+                    Label("Open details", systemImage: "rectangle.portrait.and.arrow.right")
+                }
+                Toggle(isOn: $openWebsitesAutomatically) {
+                    Label("Open websites", systemImage: "safari")
+                }
+            } header: {
+                Text("When a code is read")
+            } footer: {
+                Text(openWebsitesAutomatically
+                     ? "Links go straight to your browser. Anything Quby flags as risky still waits for you."
+                     : (showDetailsAutomatically
+                        ? "The details screen opens as soon as a code is read."
+                        : "Codes are read quietly. Tap View details when you want them."))
+            }
+
+            Section {
+                Toggle(isOn: $saveHistory) {
+                    Label("Save codes", systemImage: "clock.arrow.circlepath")
+                }
+
+                Button(role: .destructive) {
+                    confirmClear = true
+                } label: {
+                    Label {
+                        Text("Clear history")
+                    } icon: {
+                        Image(systemName: "trash")
+                            .foregroundStyle(.red)
+                    }
+                }
+            } header: {
+                Text("History")
+            } footer: {
+                Text("Nothing saved yet.")
+            }
+
+            Section {
+                Button {
+                    showGuide = true
+                } label: {
+                    Label("Onboarding", systemImage: "hand.palm.facing")
+                }
+
+                LabeledContent("Version", value: version)
+            } header: {
+                Text("About")
+            } footer: {
+                Text("Quby keeps everything on your device. Nothing is collected or sent anywhere.")
+            }
+        }
+        .navigationTitle("Settings")
+        .toolbarTitleDisplayMode(.inlineLarge)
+        .sheet(isPresented: $showGuide) {
+            GuideView()
+                .presentationDragIndicator(.visible)
+        }
+        .confirmationDialog("Delete every saved code?",
+                            isPresented: $confirmClear,
+                            titleVisibility: .visible) {
+            Button("Delete all", role: .destructive) { }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("This cannot be undone.")
+        }
+    }
+}
+
+#Preview {
+    NavigationStack {
+        SettingsView()
+    }
+}
