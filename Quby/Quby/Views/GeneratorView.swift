@@ -150,13 +150,9 @@ struct GeneratorView: View {
         }
     }
 
-    private var emptyResult: some View {
-        VStack(spacing: 12) {
-            ContentUnavailableView(
-                "No code yet",
-                systemImage: "qrcode",
-                description: Text("Choose a type above to get started.")
-            )
+    private var result: some View {
+        VStack(spacing: 20) {
+            resultContent
 
             if let message = viewModel.message {
                 Text(message)
@@ -166,22 +162,73 @@ struct GeneratorView: View {
         }
     }
 
-    private var result: some View {
-        VStack(spacing: 20) {
-            if let qrImage = viewModel.qrImage {
-                qrImage
-                    .resizable()
-                    .interpolation(.none)
-                    .scaledToFit()
-                    .frame(maxWidth: horizontalSizeClass == .regular ? 320 : 260,
-                           maxHeight: horizontalSizeClass == .regular ? 320 : 260)
-            }
+    private var emptyResult: some View {
+        VStack(spacing: 12) {
+            ContentUnavailableView("No code yet",
+                                   systemImage: "qrcode",
+                                   description: Text("Choose a type above to get started."))
 
             if let message = viewModel.message {
                 Text(message)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
+        }
+    }
+
+    @ViewBuilder
+    private var resultContent: some View {
+        if let qrImage = viewModel.qrImage {
+            qrImage
+                .resizable()
+                .interpolation(.none)
+                .scaledToFit()
+                .frame(maxWidth: horizontalSizeClass == .regular ? 320 : 260,
+                       maxHeight: horizontalSizeClass == .regular ? 320 : 260)
+
+            HStack(spacing: 12) {
+                Menu {
+                    if let pngURL = viewModel.pngURL {
+                        ShareLink(item: pngURL) {
+                            Label("PNG image", systemImage: "photo")
+                        }
+                    }
+                    if let pdfURL = viewModel.pdfURL {
+                        ShareLink(item: pdfURL) {
+                            Label("PDF document", systemImage: "doc.text")
+                        }
+                    }
+                    if let svgURL = viewModel.svgURL {
+                        ShareLink(item: svgURL) {
+                            Label("SVG vector", systemImage: "curlybraces")
+                        }
+                    }
+                } label: {
+                    Label("Share", systemImage: "square.and.arrow.up")
+                        .padding(.horizontal, 4)
+                }
+                .buttonStyle(.bordered)
+                .buttonBorderShape(.capsule)
+
+                Button {
+                    Task { await viewModel.saveToPhotos() }
+                } label: {
+                    Label("Save", systemImage: "square.and.arrow.down")
+                        .padding(.horizontal, 4)
+                }
+                .buttonStyle(.bordered)
+                .buttonBorderShape(.capsule)
+
+                Button(role: .destructive) {
+                    viewModel.clear()
+                } label: {
+                    Label("Clear", systemImage: "xmark")
+                        .padding(.horizontal, 4)
+                }
+                .buttonStyle(.bordered)
+                .buttonBorderShape(.capsule)
+            }
+            .lineLimit(1)
         }
     }
 

@@ -264,6 +264,7 @@
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Quby needs access to the camera to scan a QR.";
 				INFOPLIST_KEY_NSContactsUsageDescription = "Quby needs access to contacts to create a QR.";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Quby needs access to photos to save a QR.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Quby needs access to photos to scan a QR.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -303,6 +304,7 @@
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Quby needs access to the camera to scan a QR.";
 				INFOPLIST_KEY_NSContactsUsageDescription = "Quby needs access to contacts to create a QR.";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Quby needs access to photos to save a QR.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Quby needs access to photos to scan a QR.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;

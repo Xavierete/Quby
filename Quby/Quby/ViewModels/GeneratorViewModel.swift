@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import Photos
 import ImageIO
 import UIKit
 
@@ -17,11 +18,16 @@ final class GeneratorViewModel {
     private(set) var hasLogo = false
 
     private(set) var qrImage: Image?
+    private(set) var shareURL: URL?
+    private(set) var pngURL: URL?
+    private(set) var pdfURL: URL?
+    private(set) var svgURL: URL?
     private(set) var message: String?
 
     @ObservationIgnored var modelContext: ModelContext?
     @ObservationIgnored private let generator = QRCodeGenerator()
     @ObservationIgnored private let builder = QRPayloadBuilder()
+    @ObservationIgnored private var cgImage: CGImage?
     @ObservationIgnored private var logo: CGImage?
 
     var canGenerate: Bool {
@@ -38,8 +44,41 @@ final class GeneratorViewModel {
             return
         }
 
+        cgImage = image
         qrImage = Image(decorative: image, scale: 1)
+        pngURL = generator.writePNG(image, named: "QRCode")
+        pdfURL = generator.writePDF(from: payload, style: style, logo: logo, named: "QRCode")
+        svgURL = generator.writeSVG(from: payload, style: style, logo: logo, named: "QRCode")
+        shareURL = pngURL
         addToHistory(payload)
+    }
+
+    func saveToPhotos() async {
+        guard let cgImage, let data = generator.pngData(from: cgImage) else { return }
+
+        let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
+        guard status == .authorized || status == .limited else {
+            message = "Photos access denied."
+            return
+        }
+
+        do {
+            try await PHPhotoLibrary.shared().performChanges {
+                let request = PHAssetCreationRequest.forAsset()
+                request.addResource(with: .photo, data: data, options: nil)
+            }
+            message = "Saved to Photos."
+        } catch {
+            message = "Could not save the image."
+        }
+    }
+
+    func clear() {
+        clearResult()
+        input = QRInput()
+        style = QRStyle()
+        logo = nil
+        hasLogo = false
     }
 
     func setLogo(_ data: Data?) {
@@ -64,6 +103,11 @@ final class GeneratorViewModel {
 
     private func clearResult() {
         qrImage = nil
+        shareURL = nil
+        pngURL = nil
+        pdfURL = nil
+        svgURL = nil
+        cgImage = nil
         message = nil
     }
 
