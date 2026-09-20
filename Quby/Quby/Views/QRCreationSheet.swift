@@ -1,4 +1,5 @@
 import SwiftUI
+import PhotosUI
 
 struct QRCreationSheet: View {
 
@@ -17,13 +18,14 @@ struct QRCreationSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var showPassword = false
+    @State private var logoItem: PhotosPickerItem?
     @FocusState private var focusedField: Field?
 
     var body: some View {
         NavigationStack {
             Form {
                 fieldsSection
-                QRStyleFormSections(viewModel: viewModel)
+                QRStyleFormSections(viewModel: viewModel, logoItem: $logoItem)
             }
             .scrollContentBackground(.hidden)
             .background(Color(uiColor: .systemGroupedBackground))
@@ -48,6 +50,23 @@ struct QRCreationSheet: View {
             .scrollDismissesKeyboard(.interactively)
             .onAppear { viewModel.type = type }
             .onChange(of: viewModel.input.wifiSecurity) { _, _ in resetTyping() }
+            .onChange(of: logoItem) { _, newItem in
+                Task {
+                    guard let newItem else {
+                        await MainActor.run { viewModel.removeLogo() }
+                        return
+                    }
+
+                    guard let picked = try? await newItem.loadTransferable(type: PickedImageData.self) else {
+                        await MainActor.run { logoItem = nil }
+                        return
+                    }
+
+                    await MainActor.run {
+                        viewModel.setLogo(picked.data)
+                    }
+                }
+            }
         }
     }
 

@@ -9,8 +9,9 @@ struct QRCodeGenerator {
 
     func makeImage(from text: String,
                    style: QRStyle = QRStyle(),
+                   logo: CGImage? = nil,
                    minimumSize: CGFloat = 1024) -> CGImage? {
-        guard let modules = extractModules(from: text, correction: style.correction) else { return nil }
+        guard let modules = extractModules(from: text, hasLogo: logo != nil, correction: style.correction) else { return nil }
         let rows = modules.count
         let columns = modules[0].count
         let scale = max(1, (minimumSize / CGFloat(columns)).rounded(.up))
@@ -25,17 +26,17 @@ struct QRCodeGenerator {
                                      space: CGColorSpaceCreateDeviceRGB(),
                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
 
-        renderModules(modules, in: canvas, width: width, height: height, scale: scale, style: style)
+        renderModules(modules, in: canvas, width: width, height: height, scale: scale, style: style, logo: logo)
         return canvas.makeImage()
     }
 
-    private func extractModules(from text: String, correction: QRCorrection) -> [[Bool]]? {
+    private func extractModules(from text: String, hasLogo: Bool, correction: QRCorrection) -> [[Bool]]? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
 
         let filter = CIFilter.qrCodeGenerator()
         filter.message = Data(trimmed.utf8)
-        filter.correctionLevel = correction.rawValue
+        filter.correctionLevel = hasLogo ? QRCorrection.high.rawValue : correction.rawValue
 
         guard let output = filter.outputImage,
               output.extent.width > 0 else { return nil }
@@ -72,7 +73,8 @@ struct QRCodeGenerator {
                               width: Int,
                               height: Int,
                               scale: CGFloat,
-                              style: QRStyle) {
+                              style: QRStyle,
+                              logo: CGImage?) {
         let rows = modules.count
         let columns = modules[0].count
 
@@ -97,6 +99,10 @@ struct QRCodeGenerator {
                 }
             }
         }
+
+        if let logo {
+            drawLogo(logo, in: canvas, width: width, height: height, background: style.background)
+        }
     }
 
     private func addShape(for module: QRModuleStyle, in rect: CGRect, to canvas: CGContext) {
@@ -113,6 +119,31 @@ struct QRCodeGenerator {
         case .dots:
             canvas.fillEllipse(in: rect.insetBy(dx: rect.width * 0.06, dy: rect.height * 0.06))
         }
+    }
+
+    private func drawLogo(_ logo: CGImage,
+                          in canvas: CGContext,
+                          width: Int,
+                          height: Int,
+                          background: CodeColor) {
+        let side = CGFloat(min(width, height)) * 0.22
+        let box = CGRect(x: (CGFloat(width) - side) / 2,
+                         y: (CGFloat(height) - side) / 2,
+                         width: side,
+                         height: side)
+        let padded = box.insetBy(dx: -side * 0.12, dy: -side * 0.12)
+
+        canvas.setFillColor(cgColor(background))
+        canvas.addPath(CGPath(roundedRect: padded,
+                              cornerWidth: padded.width * 0.2,
+                              cornerHeight: padded.height * 0.2,
+                              transform: nil))
+        canvas.fillPath()
+
+        canvas.saveGState()
+        canvas.clip(to: [box])
+        canvas.draw(logo, in: box)
+        canvas.restoreGState()
     }
 
     private struct Region {

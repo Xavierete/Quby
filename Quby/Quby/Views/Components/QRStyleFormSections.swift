@@ -1,13 +1,16 @@
 import SwiftUI
+import PhotosUI
 
 struct QRStyleFormSections: View {
 
     @Bindable var viewModel: GeneratorViewModel
+    @Binding var logoItem: PhotosPickerItem?
 
     var body: some View {
         colourSection
         shapeSection
         correctionSection
+        logoSection
     }
 
     private var colourSection: some View {
@@ -80,12 +83,33 @@ struct QRStyleFormSections: View {
                     .buttonStyle(.plain)
                 }
             }
+            .opacity(viewModel.hasLogo ? 0.4 : 1)
+            .disabled(viewModel.hasLogo)
 
-            Text(viewModel.style.correction.detail)
+            Text(viewModel.hasLogo
+                 ? "A logo needs the highest correction level, so it is fixed while one is set."
+                 : viewModel.style.correction.detail)
                 .font(.caption)
                 .foregroundStyle(.secondary)
         } header: {
             Text("Error correction")
+        }
+    }
+
+    private var logoSection: some View {
+        Section {
+            PhotosPicker(selection: $logoItem, matching: .images) {
+                Label(viewModel.hasLogo ? "Change logo" : "Add logo", systemImage: "photo.circle")
+            }
+
+            if viewModel.hasLogo {
+                Button("Remove logo", role: .destructive) {
+                    viewModel.removeLogo()
+                    logoItem = nil
+                }
+            }
+        } header: {
+            Text("Logo")
         }
     }
 }
