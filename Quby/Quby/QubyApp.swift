@@ -7,6 +7,11 @@ enum QubyWindowID {
 
 @main
 struct QubyApp: App {
+
+    init() {
+        SettingsKey.registerDefaults()
+    }
+
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
             CodeRecord.self,

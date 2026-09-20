@@ -36,6 +36,7 @@ final class GeneratorViewModel {
     }
 
     private func addToHistory(_ value: String) {
+        guard SettingsKey.isOn(SettingsKey.saveHistory) else { return }
         guard let modelContext else { return }
 
         var descriptor = FetchDescriptor<CodeRecord>(

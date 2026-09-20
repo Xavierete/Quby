@@ -1,11 +1,15 @@
 import SwiftUI
+import SwiftData
 
 struct SettingsView: View {
+
+    @Environment(\.modelContext) private var modelContext
+    @Query private var records: [CodeRecord]
 
     @State private var scanSound = true
     @State private var scanHaptics = true
     @State private var showDetailsAutomatically = false
-    @State private var saveHistory = true
+    @AppStorage(SettingsKey.saveHistory) private var saveHistory = true
     @State private var openWebsitesAutomatically = false
     @State private var confirmClear = false
     @State private var showGuide = false
@@ -57,10 +61,13 @@ struct SettingsView: View {
                             .foregroundStyle(.red)
                     }
                 }
+                .disabled(records.isEmpty)
             } header: {
                 Text("History")
             } footer: {
-                Text("Nothing saved yet.")
+                Text(records.isEmpty
+                     ? "Nothing saved yet."
+                     : "^[\(records.count) code](inflect: true) saved on this device.")
             }
 
             Section {
@@ -86,11 +93,15 @@ struct SettingsView: View {
         .confirmationDialog("Delete every saved code?",
                             isPresented: $confirmClear,
                             titleVisibility: .visible) {
-            Button("Delete all", role: .destructive) { }
+            Button("Delete all", role: .destructive) { clearHistory() }
             Button("Cancel", role: .cancel) { }
         } message: {
             Text("This cannot be undone.")
         }
+    }
+
+    private func clearHistory() {
+        try? modelContext.delete(model: CodeRecord.self)
     }
 }
 
@@ -98,4 +109,5 @@ struct SettingsView: View {
     NavigationStack {
         SettingsView()
     }
+    .modelContainer(for: CodeRecord.self, inMemory: true)
 }
