@@ -60,14 +60,9 @@ struct GeneratorView: View {
                 }
             }
             .scrollDismissesKeyboard(.interactively)
-            .onChange(of: viewModel.resultVersion) { _, _ in
-                guard viewModel.qrImage != nil else { return }
-                Task {
-                    try? await Task.sleep(for: .milliseconds(80))
-                    withAnimation(.smooth(duration: 0.6)) {
-                        proxy.scrollTo(resultID, anchor: .center)
-                    }
-                }
+            .onChange(of: viewModel.qrImage) { _, image in
+                guard image != nil else { return }
+                scrollToResult(using: proxy)
             }
         }
         .navigationTitle("Create")
@@ -186,6 +181,17 @@ struct GeneratorView: View {
                 Text(message)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func scrollToResult(using proxy: ScrollViewProxy) {
+        guard viewModel.qrImage != nil else { return }
+
+        Task {
+            try? await Task.sleep(for: .milliseconds(80))
+            withAnimation(.smooth(duration: 0.6)) {
+                proxy.scrollTo(resultID, anchor: .center)
             }
         }
     }

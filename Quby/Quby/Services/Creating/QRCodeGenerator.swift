@@ -11,39 +11,21 @@ struct QRCodeGenerator {
                    style: QRStyle = QRStyle(),
                    minimumSize: CGFloat = 1024) -> CGImage? {
         guard let modules = extractModules(from: text, correction: style.correction) else { return nil }
-
         let rows = modules.count
         let columns = modules[0].count
         let scale = max(1, (minimumSize / CGFloat(columns)).rounded(.up))
         let width = Int(CGFloat(columns) * scale)
         let height = Int(CGFloat(rows) * scale)
 
-        guard let canvas = CGContext(
-            data: nil,
-            width: width,
-            height: height,
-            bitsPerComponent: 8,
-            bytesPerRow: 0,
-            space: CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        ) else { return nil }
+        guard let canvas = CGContext(data: nil,
+                                     width: width,
+                                     height: height,
+                                     bitsPerComponent: 8,
+                                     bytesPerRow: 0,
+                                     space: CGColorSpaceCreateDeviceRGB(),
+                                     bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
 
-        canvas.setFillColor(cgColor(style.background))
-        canvas.fill(CGRect(x: 0, y: 0, width: width, height: height))
-        canvas.setFillColor(cgColor(style.foreground))
-
-        for row in 0..<rows {
-            for column in 0..<columns where modules[row][column] {
-                let rect = CGRect(
-                    x: CGFloat(column) * scale,
-                    y: CGFloat(rows - row - 1) * scale,
-                    width: scale,
-                    height: scale
-                )
-                canvas.fill(rect)
-            }
-        }
-
+        renderModules(modules, in: canvas, width: width, height: height, scale: scale, style: style)
         return canvas.makeImage()
     }
 
@@ -55,7 +37,9 @@ struct QRCodeGenerator {
         filter.message = Data(trimmed.utf8)
         filter.correctionLevel = correction.rawValue
 
-        guard let output = filter.outputImage, output.extent.width > 0 else { return nil }
+        guard let output = filter.outputImage,
+              output.extent.width > 0 else { return nil }
+
         return modules(from: output)
     }
 
@@ -66,16 +50,13 @@ struct QRCodeGenerator {
               let cgImage = context.createCGImage(image, from: image.extent) else { return nil }
 
         var pixels = [UInt8](repeating: 0, count: width * height * 4)
-        guard let reader = CGContext(
-            data: &pixels,
-            width: width,
-            height: height,
-            bitsPerComponent: 8,
-            bytesPerRow: width * 4,
-            space: CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        ) else { return nil }
-
+        guard let reader = CGContext(data: &pixels,
+                                     width: width,
+                                     height: height,
+                                     bitsPerComponent: 8,
+                                     bytesPerRow: width * 4,
+                                     space: CGColorSpaceCreateDeviceRGB(),
+                                     bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
         reader.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
 
         return (0..<height).map { row in
@@ -84,6 +65,84 @@ struct QRCodeGenerator {
                 return pixels[offset] < 128
             }
         }
+    }
+
+    private func renderModules(_ modules: [[Bool]],
+                              in canvas: CGContext,
+                              width: Int,
+                              height: Int,
+                              scale: CGFloat,
+                              style: QRStyle) {
+        let rows = modules.count
+        let columns = modules[0].count
+
+        canvas.setFillColor(cgColor(style.background))
+        canvas.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        canvas.setFillColor(cgColor(style.foreground))
+
+        let finders = finderRegions(in: modules)
+
+        for row in 0..<rows {
+            for column in 0..<columns where modules[row][column] {
+                let rect = CGRect(x: CGFloat(column) * scale,
+                                  y: CGFloat(rows - row - 1) * scale,
+                                  width: scale,
+                                  height: scale)
+
+                let isFinder = finders.contains { $0.contains(row: row, column: column) }
+                if isFinder {
+                    canvas.fill(rect)
+                } else {
+                    addShape(for: style.module, in: rect, to: canvas)
+                }
+            }
+        }
+    }
+
+    private func addShape(for module: QRModuleStyle, in rect: CGRect, to canvas: CGContext) {
+        switch module {
+        case .square:
+            canvas.fill(rect)
+        case .rounded:
+            let path = CGPath(roundedRect: rect.insetBy(dx: rect.width * 0.04, dy: rect.height * 0.04),
+                              cornerWidth: rect.width * 0.3,
+                              cornerHeight: rect.height * 0.3,
+                              transform: nil)
+            canvas.addPath(path)
+            canvas.fillPath()
+        case .dots:
+            canvas.fillEllipse(in: rect.insetBy(dx: rect.width * 0.06, dy: rect.height * 0.06))
+        }
+    }
+
+    private struct Region {
+        let rows: Range<Int>
+        let columns: Range<Int>
+
+        func contains(row: Int, column: Int) -> Bool {
+            rows.contains(row) && columns.contains(column)
+        }
+    }
+
+    private func finderRegions(in modules: [[Bool]]) -> [Region] {
+        var minRow = modules.count, maxRow = 0, minColumn = modules[0].count, maxColumn = 0
+
+        for (rowIndex, row) in modules.enumerated() {
+            for (columnIndex, isDark) in row.enumerated() where isDark {
+                minRow = min(minRow, rowIndex)
+                maxRow = max(maxRow, rowIndex)
+                minColumn = min(minColumn, columnIndex)
+                maxColumn = max(maxColumn, columnIndex)
+            }
+        }
+        guard minRow <= maxRow, minColumn <= maxColumn else { return [] }
+
+        let size = 7
+        return [
+            Region(rows: minRow..<(minRow + size), columns: minColumn..<(minColumn + size)),
+            Region(rows: minRow..<(minRow + size), columns: (maxColumn - size + 1)..<(maxColumn + 1)),
+            Region(rows: (maxRow - size + 1)..<(maxRow + 1), columns: minColumn..<(minColumn + size))
+        ]
     }
 
     private func cgColor(_ color: CodeColor) -> CGColor {

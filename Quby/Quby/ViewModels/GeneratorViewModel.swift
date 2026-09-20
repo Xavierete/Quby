@@ -4,12 +4,16 @@ import SwiftData
 @Observable
 final class GeneratorViewModel {
 
-    var type: QRType = .website
+    var type: QRType = .website {
+        didSet { clearResult() }
+    }
     var input = QRInput()
-    var style = QRStyle()
+
+    var style = QRStyle() {
+        didSet { redrawIfNeeded() }
+    }
 
     private(set) var qrImage: Image?
-    private(set) var resultVersion = 0
     private(set) var message: String?
 
     @ObservationIgnored var modelContext: ModelContext?
@@ -25,14 +29,23 @@ final class GeneratorViewModel {
 
         guard let payload = builder.payload(for: type, input: input),
               let image = generator.makeImage(from: payload, style: style) else {
-            qrImage = nil
+            clearResult()
             message = "Fill in the fields above first."
             return
         }
 
         qrImage = Image(decorative: image, scale: 1)
-        resultVersion += 1
         addToHistory(payload)
+    }
+
+    private func redrawIfNeeded() {
+        guard qrImage != nil else { return }
+        generate()
+    }
+
+    private func clearResult() {
+        qrImage = nil
+        message = nil
     }
 
     private func addToHistory(_ value: String) {

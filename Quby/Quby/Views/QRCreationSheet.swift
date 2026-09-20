@@ -17,64 +17,16 @@ struct QRCreationSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var showPassword = false
-    @State private var correction = "M"
     @FocusState private var focusedField: Field?
 
     var body: some View {
         NavigationStack {
             Form {
                 fieldsSection
-
-                Section {
-                    Text("Classic")
-                        .foregroundStyle(.secondary)
-                } header: {
-                    Text("Colour")
-                } footer: {
-                    Text("Sets the foreground and background colours of your code.")
-                }
-
-                Section {
-                    Text("Square")
-                        .foregroundStyle(.secondary)
-                } header: {
-                    Text("Shape")
-                } footer: {
-                    Text("Changes how each module in the QR code is drawn.")
-                }
-
-                Section {
-                    HStack(spacing: 8) {
-                        ForEach(["L", "M", "Q", "H"], id: \.self) { level in
-                            Button {
-                                correction = level
-                            } label: {
-                                Text(level)
-                                    .font(.caption.weight(.medium))
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 8)
-                                    .background(correction == level
-                                                ? Color.accentColor : Color.gray.opacity(0.12),
-                                                in: Capsule())
-                                    .foregroundStyle(correction == level
-                                                     ? Color.white : Color.primary)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                } header: {
-                    Text("Error correction")
-                }
-
-                Section {
-                    Button {
-                    } label: {
-                        Label("Add logo", systemImage: "photo.circle")
-                    }
-                } header: {
-                    Text("Logo")
-                }
+                QRStyleFormSections(viewModel: viewModel)
             }
+            .scrollContentBackground(.hidden)
+            .background(Color(uiColor: .systemGroupedBackground))
             .navigationTitle(type.title)
             .toolbarTitleDisplayMode(.inline)
             .toolbar {
@@ -95,10 +47,7 @@ struct QRCreationSheet: View {
             }
             .scrollDismissesKeyboard(.interactively)
             .onAppear { viewModel.type = type }
-            .onChange(of: viewModel.input.wifiSecurity) { _, _ in
-                focusedField = nil
-                showPassword = false
-            }
+            .onChange(of: viewModel.input.wifiSecurity) { _, _ in resetTyping() }
         }
     }
 
@@ -195,11 +144,9 @@ struct QRCreationSheet: View {
             .autocorrectionDisabled()
 
             Button {
-                let wasTyping = focusedField == .wifiPasswordSecure || focusedField == .wifiPasswordPlain
+                let wasTyping = isTypingPassword
                 showPassword.toggle()
-                if wasTyping {
-                    focusedField = showPassword ? .wifiPasswordPlain : .wifiPasswordSecure
-                }
+                if wasTyping { focusedField = activePasswordField }
             } label: {
                 Image(systemName: showPassword ? "eye" : "eye.slash")
                     .foregroundStyle(.secondary)
@@ -208,8 +155,17 @@ struct QRCreationSheet: View {
             .accessibilityLabel(showPassword ? "Hide password" : "Show password")
         }
     }
-}
 
-#Preview {
-    QRCreationSheet(type: .website, viewModel: GeneratorViewModel())
+    private var activePasswordField: Field {
+        showPassword ? .wifiPasswordPlain : .wifiPasswordSecure
+    }
+
+    private var isTypingPassword: Bool {
+        focusedField == .wifiPasswordSecure || focusedField == .wifiPasswordPlain
+    }
+
+    private func resetTyping() {
+        focusedField = nil
+        showPassword = false
+    }
 }
