@@ -13,14 +13,17 @@ final class CodeRecord {
     var kind: CodeKind = CodeKind.scanned
     var createdAt: Date = Date()
     var isFavorite: Bool = false
+    var symbology: String = "QR code"
 
     init(value: String,
          kind: CodeKind,
          createdAt: Date = Date(),
-         isFavorite: Bool = false) {
+         isFavorite: Bool = false,
+         symbology: String = "QR code") {
         self.value = value
         self.kind = kind
         self.createdAt = createdAt
         self.isFavorite = isFavorite
+        self.symbology = symbology
     }
 }

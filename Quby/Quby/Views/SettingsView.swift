@@ -6,11 +6,11 @@ struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var records: [CodeRecord]
 
-    @State private var scanSound = true
-    @State private var scanHaptics = true
-    @State private var showDetailsAutomatically = false
+    @AppStorage(SettingsKey.scanSound) private var scanSound = true
+    @AppStorage(SettingsKey.scanHaptics) private var scanHaptics = true
+    @AppStorage(SettingsKey.showDetailsAutomatically) private var showDetailsAutomatically = false
     @AppStorage(SettingsKey.saveHistory) private var saveHistory = true
-    @State private var openWebsitesAutomatically = false
+    @AppStorage(SettingsKey.openWebsitesAutomatically) private var openWebsitesAutomatically = false
     @State private var confirmClear = false
     @State private var showGuide = false
 

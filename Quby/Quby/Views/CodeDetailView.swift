@@ -5,10 +5,19 @@ struct CodeDetailView: View {
     let record: CodeRecord
 
     @State private var qrImage: Image?
+    @State private var qrBitmap: CGImage?
     @State private var showPassword = false
+    @State private var actionMessage: String?
+
+    private let clipboard = Clipboard()
+    private let generator = QRCodeGenerator()
 
     private var content: ScannedContent {
         ScannedContentParser().parse(record.value)
+    }
+
+    private var isQRCode: Bool {
+        record.symbology.lowercased().contains("qr")
     }
 
     var body: some View {
@@ -25,6 +34,13 @@ struct CodeDetailView: View {
                         ProgressView()
                             .frame(height: 220)
                     }
+
+                    if record.symbology != "QR code" {
+                        Text("Scanned as \(record.symbology), shown here as a QR code.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 8)
@@ -39,6 +55,16 @@ struct CodeDetailView: View {
                     Text(content.title)
                     Spacer()
                     Text(record.createdAt, format: .dateTime.day().month().hour().minute())
+                }
+            }
+
+            Section("Actions") {
+                copyButtons
+
+                if let actionMessage {
+                    Text(actionMessage)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                 }
             }
         }
@@ -112,6 +138,26 @@ struct CodeDetailView: View {
         }
     }
 
+    private var copyButtons: some View {
+        Group {
+            if isQRCode, let qrBitmap {
+                Button {
+                    clipboard.copy(image: qrBitmap)
+                    actionMessage = "QR code image copied."
+                } label: {
+                    Label("Copy QR image", systemImage: "photo.on.rectangle")
+                }
+            }
+
+            Button {
+                clipboard.copy(text: record.value)
+                actionMessage = isQRCode ? "Text copied." : "Barcode number copied."
+            } label: {
+                Label(isQRCode ? "Copy text" : "Copy number", systemImage: "doc.on.doc")
+            }
+        }
+    }
+
     private func row(_ label: String, _ value: String) -> some View {
         HStack(alignment: .firstTextBaseline) {
             Text(label)
@@ -125,7 +171,8 @@ struct CodeDetailView: View {
 
     private func makeCode() {
         guard qrImage == nil,
-              let image = QRCodeGenerator().makeImage(from: record.value) else { return }
+              let image = generator.makeImage(from: record.value) else { return }
+        qrBitmap = image
         qrImage = Image(decorative: image, scale: 1)
     }
 }
@@ -134,7 +181,7 @@ struct CodeDetailView: View {
     NavigationStack {
         CodeDetailView(record: CodeRecord(
             value: #"WIFI:T:WPA;S:Quby Cafe;P:latte\;123;H:true;;"#,
-            kind: .created
+            kind: .scanned
         ))
     }
 }

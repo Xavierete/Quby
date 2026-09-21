@@ -5,14 +5,20 @@ import SwiftData
 struct GeneratorView: View {
 
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.openURL) private var openURL
     @Environment(\.openWindow) private var openWindow
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     @State private var viewModel = GeneratorViewModel()
+    @State private var photoScanner = ScannerViewModel()
     @State private var activeCreationType: QRType?
     @State private var showCameraScanner = false
     @State private var showPhotoPicker = false
     @State private var scanPhotoItem: PhotosPickerItem?
+    @State private var photoScanRecord: CodeRecord?
+    @State private var photoScanError: String?
+    @State private var showPhotoScanError = false
+    @State private var photoScanCount = 0
     @State private var contentWidth: CGFloat = 0
 
     private let gridSpacing: CGFloat = 12
@@ -91,6 +97,10 @@ struct GeneratorView: View {
                 .presentationSizing(.form)
         }
         .photosPicker(isPresented: $showPhotoPicker, selection: $scanPhotoItem, matching: .images)
+        .sheet(item: $photoScanRecord) { record in
+            CodeDetailSheet(record: record) { photoScanRecord = nil }
+                .presentationDragIndicator(.visible)
+        }
         .sheet(isPresented: $showCameraScanner) {
             NavigationStack {
                 CameraScannerView()
@@ -98,8 +108,40 @@ struct GeneratorView: View {
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
         }
+        .alert("Could not scan photo", isPresented: $showPhotoScanError) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(photoScanError ?? "Try another image.")
+        }
+        .sensoryFeedback(.success, trigger: photoScanCount)
         .task {
             viewModel.modelContext = modelContext
+            photoScanner.modelContext = modelContext
+        }
+        .onChange(of: scanPhotoItem) { _, newItem in
+            Task { await handlePhotoScan(newItem) }
+        }
+    }
+
+    private func handlePhotoScan(_ item: PhotosPickerItem?) async {
+        guard let item else { return }
+
+        let outcome = await photoScanner.scanPhoto(item)
+        scanPhotoItem = nil
+
+        switch outcome {
+        case .success(let record):
+            if SettingsKey.isOn(SettingsKey.scanHaptics) {
+                photoScanCount += 1
+            }
+            photoScanRecord = record
+        case .openURL(let url):
+            openURL(url)
+        case .failure(let message):
+            photoScanError = message
+            showPhotoScanError = true
+        case .cancelled:
+            break
         }
     }
 
