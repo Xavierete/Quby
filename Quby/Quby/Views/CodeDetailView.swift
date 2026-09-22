@@ -1,14 +1,20 @@
 import SwiftUI
+import ImageIO
+import UIKit
 
 struct CodeDetailView: View {
 
     let record: CodeRecord
 
-    @Environment(\.openURL) private var openURL
     @State private var showPassword = false
-    @State private var qrImage: Image?
-    @State private var qrBitmap: CGImage?
+    @State private var selectedPreviewPage: QRPreviewPage = .styled
+    @State private var styledImage: Image?
+    @State private var baseImage: Image?
+    @State private var styledBitmap: CGImage?
+    @State private var baseBitmap: CGImage?
     @State private var confirmOpen = false
+    @State private var browserLink: BrowserLink?
+    @State private var showOfflineAlert = false
     @State private var actionMessage: String?
     @State private var isWorking = false
 
@@ -22,6 +28,21 @@ struct CodeDetailView: View {
 
     private var isQRCode: Bool {
         record.symbology.lowercased().contains("qr")
+    }
+
+    private var showsBothPreviews: Bool {
+        styledBitmap != nil && baseBitmap != nil
+    }
+
+    private var visiblePreviewPages: [QRPreviewPage] {
+        showsBothPreviews ? QRPreviewPage.allCases : [.base]
+    }
+
+    private var activeBitmap: CGImage? {
+        switch selectedPreviewPage {
+        case .styled: return styledBitmap ?? baseBitmap
+        case .base: return baseBitmap
+        }
     }
 
     var body: some View {
@@ -56,19 +77,21 @@ struct CodeDetailView: View {
                         ShareLink(item: record.value) {
                             Label("Share text", systemImage: "text.alignleft")
                         }
-                        if let qrBitmap, let png = generator.writePNG(qrBitmap, named: "QRCode") {
+                        if let activeBitmap, let png = generator.writePNG(activeBitmap, named: "QRCode") {
                             ShareLink(item: png) {
                                 Label("PNG image", systemImage: "photo")
                             }
                         }
-                        if let pdf = generator.writePDF(from: record.value, named: "QRCode") {
-                            ShareLink(item: pdf) {
-                                Label("PDF document", systemImage: "doc.text")
+                        if selectedPreviewPage == .base || !showsBothPreviews {
+                            if let pdf = generator.writePDF(from: record.value, named: "QRCode") {
+                                ShareLink(item: pdf) {
+                                    Label("PDF document", systemImage: "doc.text")
+                                }
                             }
-                        }
-                        if let svg = generator.writeSVG(from: record.value, named: "QRCode") {
-                            ShareLink(item: svg) {
-                                Label("SVG vector", systemImage: "curlybraces")
+                            if let svg = generator.writeSVG(from: record.value, named: "QRCode") {
+                                ShareLink(item: svg) {
+                                    Label("SVG vector", systemImage: "curlybraces")
+                                }
                             }
                         }
                     } label: {
@@ -96,17 +119,27 @@ struct CodeDetailView: View {
             }
         }
         .task { makeCode() }
+        .sheet(item: $browserLink) { link in
+            WebBrowserSheet(url: link.url) { browserLink = nil }
+                .presentationDragIndicator(.visible)
+        }
+        .alert("No connection", isPresented: $showOfflineAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text("Check your internet connection and try again.")
+        }
     }
 
     @ViewBuilder
     private var codePreview: some View {
         VStack(spacing: 10) {
-            if let qrImage {
-                qrImage
-                    .resizable()
-                    .interpolation(.none)
-                    .scaledToFit()
-                    .frame(maxWidth: 220, maxHeight: 220)
+            if baseImage != nil || styledImage != nil {
+                QRPreviewPager(
+                    pages: visiblePreviewPages,
+                    selection: $selectedPreviewPage,
+                    side: 220,
+                    image: previewImage(for:)
+                )
             } else {
                 ProgressView()
                     .frame(height: 220)
@@ -121,7 +154,22 @@ struct CodeDetailView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 8)
+        .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
         .listRowBackground(Color.clear)
+        .onAppear {
+            if !showsBothPreviews {
+                selectedPreviewPage = .base
+            }
+        }
+    }
+
+    private func previewImage(for page: QRPreviewPage) -> Image {
+        switch page {
+        case .styled:
+            return styledImage ?? baseImage ?? Image(systemName: "qrcode")
+        case .base:
+            return baseImage ?? Image(systemName: "qrcode")
+        }
     }
 
     @ViewBuilder
@@ -195,7 +243,7 @@ struct CodeDetailView: View {
 
             Button {
                 if warnings.isEmpty {
-                    openURL(url)
+                    openWebsite(url)
                 } else {
                     confirmOpen = true
                 }
@@ -207,7 +255,9 @@ struct CodeDetailView: View {
             .confirmationDialog("Open \(safety.host(of: url))?",
                                 isPresented: $confirmOpen,
                                 titleVisibility: .visible) {
-                Button("Open anyway", role: .destructive) { openURL(url) }
+                Button("Open anyway", role: .destructive) {
+                    openWebsite(url)
+                }
                 Button("Cancel", role: .cancel) { }
             } message: {
                 Text(warnings.map(\.message).joined(separator: "\n\n"))
@@ -290,9 +340,9 @@ struct CodeDetailView: View {
 
     private var copyButtons: some View {
         Group {
-            if isQRCode, let qrBitmap {
+            if isQRCode, let activeBitmap {
                 Button {
-                    clipboard.copy(image: qrBitmap)
+                    clipboard.copy(image: activeBitmap)
                     actionMessage = "QR code image copied."
                 } label: {
                     Label("Copy QR image", systemImage: "photo.on.rectangle")
@@ -305,6 +355,12 @@ struct CodeDetailView: View {
             } label: {
                 Label(isQRCode ? "Copy text" : "Copy number", systemImage: "doc.on.doc")
             }
+        }
+    }
+
+    private func openWebsite(_ url: URL) {
+        Task {
+            await InAppBrowser.open(url, into: $browserLink, offlineAlert: $showOfflineAlert)
         }
     }
 
@@ -338,10 +394,33 @@ struct CodeDetailView: View {
     }
 
     private func makeCode() {
-        guard qrImage == nil,
-              let image = generator.makeImage(from: record.value) else { return }
-        qrBitmap = image
-        qrImage = Image(decorative: image, scale: 1)
+        if let data = record.styledImageData,
+           let image = Self.makeCGImage(from: data) {
+            styledBitmap = image
+            styledImage = Image(decorative: image, scale: 1)
+            selectedPreviewPage = .styled
+        }
+
+        if let data = record.baseImageData,
+           let image = Self.makeCGImage(from: data) {
+            baseBitmap = image
+            baseImage = Image(decorative: image, scale: 1)
+        } else if let image = generator.makeImage(from: record.value) {
+            baseBitmap = image
+            baseImage = Image(decorative: image, scale: 1)
+        }
+
+        if styledBitmap == nil {
+            selectedPreviewPage = .base
+        }
+    }
+
+    private static func makeCGImage(from data: Data) -> CGImage? {
+        if let source = CGImageSourceCreateWithData(data as CFData, nil),
+           let image = CGImageSourceCreateImageAtIndex(source, 0, nil) {
+            return image
+        }
+        return UIImage(data: data)?.cgImage
     }
 }
 

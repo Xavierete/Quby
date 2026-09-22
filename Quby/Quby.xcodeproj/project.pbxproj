@@ -79,9 +79,6 @@
 		};
 /* End PBXNativeTarget section */
 
-
-
-
 /* Begin PBXProject section */
 		579C25E1305FE80200AE3025 /* Project object */ = {
 			isa = PBXProject;

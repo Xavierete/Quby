@@ -4,8 +4,8 @@ enum SettingsKey {
     static let scanSound = "settings.scanSound"
     static let scanHaptics = "settings.scanHaptics"
     static let showDetailsAutomatically = "settings.showDetailsAutomatically"
-    static let saveHistory = "settings.saveHistory"
     static let openWebsitesAutomatically = "settings.openWebsitesAutomatically"
+    static let saveHistory = "settings.saveHistory"
     static let hasSeenGuide = "settings.hasSeenGuide"
 
     static func registerDefaults() {
@@ -13,8 +13,8 @@ enum SettingsKey {
             scanSound: true,
             scanHaptics: true,
             showDetailsAutomatically: false,
-            saveHistory: true,
             openWebsitesAutomatically: false,
+            saveHistory: true,
             hasSeenGuide: false
         ])
     }

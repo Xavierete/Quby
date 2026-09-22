@@ -9,8 +9,8 @@ struct SettingsView: View {
     @AppStorage(SettingsKey.scanSound) private var scanSound = true
     @AppStorage(SettingsKey.scanHaptics) private var scanHaptics = true
     @AppStorage(SettingsKey.showDetailsAutomatically) private var showDetailsAutomatically = false
-    @AppStorage(SettingsKey.saveHistory) private var saveHistory = true
     @AppStorage(SettingsKey.openWebsitesAutomatically) private var openWebsitesAutomatically = false
+    @AppStorage(SettingsKey.saveHistory) private var saveHistory = true
     @State private var confirmClear = false
     @State private var showGuide = false
 
@@ -19,6 +19,38 @@ struct SettingsView: View {
         let short = dictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
         let build = dictionary?["CFBundleVersion"] as? String ?? "1"
         return "\(short) (\(build))"
+    }
+
+    private var openDetailsBinding: Binding<Bool> {
+        Binding(
+            get: { showDetailsAutomatically },
+            set: { newValue in
+                showDetailsAutomatically = newValue
+                if newValue { openWebsitesAutomatically = false }
+            }
+        )
+    }
+
+    private var openWebsitesBinding: Binding<Bool> {
+        Binding(
+            get: { openWebsitesAutomatically },
+            set: { newValue in
+                openWebsitesAutomatically = newValue
+                if newValue { showDetailsAutomatically = false }
+            }
+        )
+    }
+
+    private var afterScanFooter: String {
+        if openWebsitesAutomatically {
+            return "Open websites is on, so Open details stays off. Safe links open in Quby with WebKit; flagged ones wait for you."
+        }
+        if showDetailsAutomatically {
+            return "Open details is on, so Open websites stays off. The details screen opens as soon as a code is created or read."
+        }
+        return ProcessInfo.processInfo.isiOSAppOnMac
+            ? "Only one of these can be on at a time. Codes stay quiet until you open More or View details."
+            : "Only one of these can be on at a time. Codes stay quiet until you tap More or View details."
     }
 
     var body: some View {
@@ -32,22 +64,25 @@ struct SettingsView: View {
                         Label("Vibration", systemImage: "iphone.radiowaves.left.and.right")
                     }
                 }
-                Toggle(isOn: $showDetailsAutomatically) {
+            } header: {
+                Text("Feedback")
+            } footer: {
+                Text(ProcessInfo.processInfo.isiOSAppOnMac
+                     ? "Play a sound when a code is read."
+                     : "Play a sound or vibrate when a code is read.")
+            }
+
+            Section {
+                Toggle(isOn: openDetailsBinding) {
                     Label("Open details", systemImage: "rectangle.portrait.and.arrow.right")
                 }
-                Toggle(isOn: $openWebsitesAutomatically) {
+                Toggle(isOn: openWebsitesBinding) {
                     Label("Open websites", systemImage: "safari")
                 }
             } header: {
-                Text("When a code is read")
+                Text("After a code")
             } footer: {
-                Text(openWebsitesAutomatically
-                     ? "Links go straight to your browser. Anything Quby flags as risky still waits for you."
-                     : (showDetailsAutomatically
-                        ? "The details screen opens as soon as a code is read."
-                        : (ProcessInfo.processInfo.isiOSAppOnMac
-                           ? "Codes are read quietly. Open View details when you want them."
-                           : "Codes are read quietly. Tap View details when you want them.")))
+                Text(afterScanFooter)
             }
 
             Section {

@@ -5,13 +5,14 @@ import UIKit
 struct CameraScannerView: View {
 
     @Environment(\.modelContext) private var modelContext
-    @Environment(\.openURL) private var openURL
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dismissWindow) private var dismissWindow
 
     @State private var viewModel = ScannerViewModel()
     @State private var focusPoint: CGPoint?
     @State private var copyMessage: String?
+    @State private var browserLink: BrowserLink?
+    @State private var showOfflineAlert = false
 
     private let clipboard = Clipboard()
     private let generator = QRCodeGenerator()
@@ -84,8 +85,10 @@ struct CameraScannerView: View {
         .sensoryFeedback(.success, trigger: viewModel.scanCount)
         .onChange(of: viewModel.autoOpenURL) { _, url in
             guard let url else { return }
-            openURL(url)
             viewModel.autoOpenHandled()
+            Task {
+                await InAppBrowser.open(url, into: $browserLink, offlineAlert: $showOfflineAlert)
+            }
         }
         .onChange(of: viewModel.lastScan?.value) { _, _ in
             copyMessage = nil
@@ -95,6 +98,15 @@ struct CameraScannerView: View {
                 CodeDetailSheet(record: scan) { viewModel.isShowingDetails = false }
                     .presentationDragIndicator(.visible)
             }
+        }
+        .sheet(item: $browserLink) { link in
+            WebBrowserSheet(url: link.url) { browserLink = nil }
+                .presentationDragIndicator(.visible)
+        }
+        .alert("No connection", isPresented: $showOfflineAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text("Check your internet connection and try again.")
         }
     }
 
@@ -154,10 +166,10 @@ struct CameraScannerView: View {
     private func openPrivacySettings() {
         if ProcessInfo.processInfo.isiOSAppOnMac {
             if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera") {
-                openURL(url)
+                UIApplication.shared.open(url)
             }
         } else if let url = URL(string: UIApplication.openSettingsURLString) {
-            openURL(url)
+            UIApplication.shared.open(url)
         }
     }
 

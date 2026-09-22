@@ -39,12 +39,18 @@ struct QRCreationSheet: View {
                 ToolbarItem(placement: .bottomBar) {
                     Button {
                         focusedField = nil
-                        viewModel.generate()
+                        viewModel.generate(queueDetailsIfEnabled: true)
                         dismiss()
                     } label: {
                         Text("Create QR code")
+                            .font(.body.weight(.bold))
+                            .foregroundStyle(Color.white)
                             .frame(maxWidth: .infinity)
                     }
+                    .buttonStyle(.glassProminent)
+                    .buttonBorderShape(.capsule)
+                    .tint(viewModel.canGenerate ? .green : .gray)
+                    .foregroundStyle(Color.white)
                     .disabled(!viewModel.canGenerate)
                 }
             }

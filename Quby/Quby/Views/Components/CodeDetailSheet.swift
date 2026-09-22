@@ -10,7 +10,15 @@ struct CodeDetailSheet: View {
             CodeDetailView(record: record)
                 .toolbar {
                     ToolbarItem(placement: .confirmationAction) {
-                        Button("Done", action: onDone)
+                        Button(action: onDone) {
+                            Image(systemName: "checkmark")
+                                .fontWeight(.semibold)
+                                .foregroundStyle(.white)
+                        }
+                        .buttonStyle(.glassProminent)
+                        .buttonBorderShape(.circle)
+                        .tint(.blue)
+                        .accessibilityLabel("Done")
                     }
                 }
         }

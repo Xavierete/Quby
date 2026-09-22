@@ -5,7 +5,6 @@ import SwiftData
 struct GeneratorView: View {
 
     @Environment(\.modelContext) private var modelContext
-    @Environment(\.openURL) private var openURL
     @Environment(\.openWindow) private var openWindow
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
@@ -16,6 +15,9 @@ struct GeneratorView: View {
     @State private var showPhotoPicker = false
     @State private var scanPhotoItem: PhotosPickerItem?
     @State private var photoScanRecord: CodeRecord?
+    @State private var createdDetailRecord: CodeRecord?
+    @State private var browserLink: BrowserLink?
+    @State private var showOfflineAlert = false
     @State private var photoScanError: String?
     @State private var showPhotoScanError = false
     @State private var photoScanCount = 0
@@ -45,7 +47,7 @@ struct GeneratorView: View {
                     VStack(spacing: 24) {
                         typeButtons
 
-                        if viewModel.qrImage != nil {
+                        if viewModel.activeImage != nil {
                             result
                                 .id(resultID)
                         } else {
@@ -66,8 +68,8 @@ struct GeneratorView: View {
                 }
             }
             .scrollDismissesKeyboard(.interactively)
-            .onChange(of: viewModel.qrImage) { _, image in
-                guard image != nil else { return }
+            .onChange(of: viewModel.activeImage != nil) { _, hasImage in
+                guard hasImage else { return }
                 scrollToResult(using: proxy)
             }
         }
@@ -91,7 +93,7 @@ struct GeneratorView: View {
                 }
             }
         }
-        .sheet(item: $activeCreationType) { type in
+        .sheet(item: $activeCreationType, onDismiss: presentCreatedFollowUpIfNeeded) { type in
             QRCreationSheet(type: type, viewModel: viewModel)
                 .presentationDragIndicator(.visible)
                 .presentationSizing(.form)
@@ -99,6 +101,14 @@ struct GeneratorView: View {
         .photosPicker(isPresented: $showPhotoPicker, selection: $scanPhotoItem, matching: .images)
         .sheet(item: $photoScanRecord) { record in
             CodeDetailSheet(record: record) { photoScanRecord = nil }
+                .presentationDragIndicator(.visible)
+        }
+        .sheet(item: $createdDetailRecord) { record in
+            CodeDetailSheet(record: record) { createdDetailRecord = nil }
+                .presentationDragIndicator(.visible)
+        }
+        .sheet(item: $browserLink) { link in
+            WebBrowserSheet(url: link.url) { browserLink = nil }
                 .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showCameraScanner) {
@@ -113,6 +123,11 @@ struct GeneratorView: View {
         } message: {
             Text(photoScanError ?? "Try another image.")
         }
+        .alert("No connection", isPresented: $showOfflineAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text("Check your internet connection and try again.")
+        }
         .sensoryFeedback(.success, trigger: photoScanCount)
         .task {
             viewModel.modelContext = modelContext
@@ -121,6 +136,20 @@ struct GeneratorView: View {
         .onChange(of: scanPhotoItem) { _, newItem in
             Task { await handlePhotoScan(newItem) }
         }
+    }
+
+    private func presentCreatedFollowUpIfNeeded() {
+        if let url = viewModel.pendingWebsiteURL {
+            viewModel.pendingWebsiteURL = nil
+            Task {
+                await InAppBrowser.open(url, into: $browserLink, offlineAlert: $showOfflineAlert)
+            }
+            return
+        }
+
+        guard let record = viewModel.pendingDetailRecord else { return }
+        viewModel.pendingDetailRecord = nil
+        createdDetailRecord = record
     }
 
     private func handlePhotoScan(_ item: PhotosPickerItem?) async {
@@ -136,7 +165,7 @@ struct GeneratorView: View {
             }
             photoScanRecord = record
         case .openURL(let url):
-            openURL(url)
+            await InAppBrowser.open(url, into: $browserLink, offlineAlert: $showOfflineAlert)
         case .failure(let message):
             photoScanError = message
             showPhotoScanError = true
@@ -220,62 +249,95 @@ struct GeneratorView: View {
 
     @ViewBuilder
     private var resultContent: some View {
-        if let qrImage = viewModel.qrImage {
-            qrImage
-                .resizable()
-                .interpolation(.none)
-                .scaledToFit()
-                .frame(maxWidth: horizontalSizeClass == .regular ? 320 : 260,
-                       maxHeight: horizontalSizeClass == .regular ? 320 : 260)
+        if viewModel.activeImage != nil {
+            let previewSide: CGFloat = horizontalSizeClass == .regular ? 320 : 260
 
-            HStack(spacing: 12) {
-                Menu {
-                    if let pngURL = viewModel.pngURL {
-                        ShareLink(item: pngURL) {
-                            Label("PNG image", systemImage: "photo")
-                        }
-                    }
-                    if let pdfURL = viewModel.pdfURL {
-                        ShareLink(item: pdfURL) {
-                            Label("PDF document", systemImage: "doc.text")
-                        }
-                    }
-                    if let svgURL = viewModel.svgURL {
-                        ShareLink(item: svgURL) {
-                            Label("SVG vector", systemImage: "curlybraces")
-                        }
-                    }
-                } label: {
-                    Label("Share", systemImage: "square.and.arrow.up")
-                        .padding(.horizontal, 4)
-                }
-                .buttonStyle(.bordered)
-                .buttonBorderShape(.capsule)
+            VStack(spacing: 12) {
+                QRPreviewPager(
+                    pages: viewModel.visiblePreviewPages,
+                    selection: $viewModel.selectedPreviewPage,
+                    side: previewSide,
+                    image: previewImage(for:)
+                )
 
-                Button {
-                    Task { await viewModel.saveToPhotos() }
-                } label: {
-                    Label("Save", systemImage: "square.and.arrow.down")
-                        .padding(.horizontal, 4)
-                }
-                .buttonStyle(.bordered)
-                .buttonBorderShape(.capsule)
+                HStack(spacing: 12) {
+                    Menu {
+                        if let pngURL = viewModel.activePNGURL {
+                            ShareLink(item: pngURL) {
+                                Label("PNG image", systemImage: "photo")
+                            }
+                        }
+                        if let pdfURL = viewModel.activePDFURL {
+                            ShareLink(item: pdfURL) {
+                                Label("PDF document", systemImage: "doc.text")
+                            }
+                        }
+                        if let svgURL = viewModel.activeSVGURL {
+                            ShareLink(item: svgURL) {
+                                Label("SVG vector", systemImage: "curlybraces")
+                            }
+                        }
+                    } label: {
+                        resultCapsuleLabel("Share", systemImage: "square.and.arrow.up", color: .green)
+                    }
+                    .buttonStyle(.plain)
 
-                Button(role: .destructive) {
-                    viewModel.clear()
-                } label: {
-                    Label("Clear", systemImage: "xmark")
-                        .padding(.horizontal, 4)
+                    Button {
+                        Task { await viewModel.saveToPhotos() }
+                    } label: {
+                        Label {
+                            Text(viewModel.isSavedToPhotos ? "Saved" : "Save")
+                                .contentTransition(.numericText())
+                        } icon: {
+                            Image(systemName: viewModel.isSavedToPhotos
+                                  ? "photo.badge.checkmark.fill"
+                                  : "photo.badge.arrow.down.fill")
+                                .contentTransition(.symbolEffect(.replace))
+                        }
+                        .font(.body.weight(.semibold))
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .foregroundStyle(.white)
+                        .background(Color.cyan.gradient, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .animation(.snappy, value: viewModel.isSavedToPhotos)
+
+                    Button {
+                        guard let record = viewModel.lastRecord else { return }
+                        createdDetailRecord = record
+                    } label: {
+                        resultCapsuleLabel("More", systemImage: "info.circle.fill", color: .blue)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(viewModel.lastRecord == nil)
                 }
-                .buttonStyle(.bordered)
-                .buttonBorderShape(.capsule)
+                .lineLimit(1)
             }
-            .lineLimit(1)
         }
     }
 
+    private func previewImage(for page: QRPreviewPage) -> Image {
+        switch page {
+        case .styled:
+            return viewModel.styledImage ?? viewModel.baseImage ?? Image(systemName: "qrcode")
+        case .base:
+            return viewModel.baseImage ?? Image(systemName: "qrcode")
+        }
+    }
+
+    private func resultCapsuleLabel(_ title: String, systemImage: String, color: Color) -> some View {
+        Label(title, systemImage: systemImage)
+            .font(.body.weight(.semibold))
+            .labelStyle(.titleAndIcon)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .foregroundStyle(.white)
+            .background(color.gradient, in: Capsule())
+    }
+
     private func scrollToResult(using proxy: ScrollViewProxy) {
-        guard viewModel.qrImage != nil else { return }
+        guard viewModel.activeImage != nil else { return }
 
         Task {
             try? await Task.sleep(for: .milliseconds(80))
