@@ -222,6 +222,10 @@ private struct QRModuleStylePreviewContent: View {
                                     case .dots:
                                         Circle()
                                             .fill(Color(uiColor: .label))
+                                    case .diamond:
+                                        Diamond()
+                                            .fill(Color(uiColor: .label))
+                                            .padding(1)
                                     }
                                 }
                                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -232,5 +236,17 @@ private struct QRModuleStylePreviewContent: View {
                 }
                 .padding(6)
             }
+    }
+}
+
+private struct Diamond: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.midX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.midY))
+        path.addLine(to: CGPoint(x: rect.midX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.midY))
+        path.closeSubpath()
+        return path
     }
 }

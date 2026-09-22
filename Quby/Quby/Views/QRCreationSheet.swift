@@ -19,6 +19,7 @@ struct QRCreationSheet: View {
 
     @State private var showPassword = false
     @State private var logoItem: PhotosPickerItem?
+    @State private var didPasteWebsite = false
     @FocusState private var focusedField: Field?
 
     var body: some View {
@@ -75,11 +76,7 @@ struct QRCreationSheet: View {
         Section {
             switch type {
             case .website:
-                TextField("Website address", text: $viewModel.input.website)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .keyboardType(.URL)
-                    .focused($focusedField, equals: .website)
+                websiteField
 
             case .contact:
                 TextField("Name", text: $viewModel.input.contactName)
@@ -146,6 +143,37 @@ struct QRCreationSheet: View {
         }
     }
 
+    private var websiteField: some View {
+        HStack(spacing: 8) {
+            TextField("Website address", text: $viewModel.input.website)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .keyboardType(.URL)
+                .focused($focusedField, equals: .website)
+
+            Button {
+                guard let pasted = Clipboard().pasteText() else { return }
+                viewModel.input.website = pasted
+                focusedField = .website
+                withAnimation {
+                    didPasteWebsite = true
+                }
+                Task {
+                    try? await Task.sleep(for: .seconds(1.2))
+                    withAnimation {
+                        didPasteWebsite = false
+                    }
+                }
+            } label: {
+                Image(systemName: didPasteWebsite ? "checkmark" : "doc.on.clipboard")
+                    .foregroundStyle(didPasteWebsite ? .green : .secondary)
+                    .contentTransition(.symbolEffect(.replace))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(didPasteWebsite ? "Pasted" : "Paste from clipboard")
+        }
+    }
+
     private var passwordField: some View {
         HStack(spacing: 8) {
             ZStack {
@@ -164,11 +192,14 @@ struct QRCreationSheet: View {
 
             Button {
                 let wasTyping = isTypingPassword
-                showPassword.toggle()
+                withAnimation {
+                    showPassword.toggle()
+                }
                 if wasTyping { focusedField = activePasswordField }
             } label: {
                 Image(systemName: showPassword ? "eye" : "eye.slash")
                     .foregroundStyle(.secondary)
+                    .contentTransition(.symbolEffect(.replace))
             }
             .buttonStyle(.plain)
             .accessibilityLabel(showPassword ? "Hide password" : "Show password")

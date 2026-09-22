@@ -49,9 +49,22 @@ final class ScannerViewModel {
         status = .unavailable
         hasTorch = false
         #else
-        scanner.start()
-        status = .scanning
-        hasTorch = scanner.hasTorch
+        await withCheckedContinuation { continuation in
+            scanner.start { [weak self] ready in
+                guard let self else {
+                    continuation.resume()
+                    return
+                }
+                if ready {
+                    self.status = .scanning
+                    self.hasTorch = self.scanner.hasTorch
+                } else {
+                    self.status = .unavailable
+                    self.hasTorch = false
+                }
+                continuation.resume()
+            }
+        }
         #endif
     }
 
@@ -132,6 +145,14 @@ final class ScannerViewModel {
     func detailsDismissed() {
         isShowingDetails = false
         guard status == .scanning else { return }
-        scanner.start()
+        scanner.start { [weak self] ready in
+            guard let self else { return }
+            if !ready {
+                self.status = .unavailable
+                self.hasTorch = false
+            } else {
+                self.hasTorch = self.scanner.hasTorch
+            }
+        }
     }
 }

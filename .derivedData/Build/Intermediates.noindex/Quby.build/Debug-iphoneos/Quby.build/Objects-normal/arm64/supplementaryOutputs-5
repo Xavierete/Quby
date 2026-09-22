@@ -1,0 +1,37 @@
+{
+  "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/Quby/Quby/ViewModels/GeneratorViewModel.swift" : {
+    "const-values" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/GeneratorViewModel.swiftconstvalues",
+    "dependencies" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/GeneratorViewModel.d",
+    "diagnostics" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/GeneratorViewModel.dia",
+    "object" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/GeneratorViewModel.o",
+    "swift-dependencies" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/GeneratorViewModel.swiftdeps"
+  },
+  "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/Quby/Quby/ViewModels/ScannerViewModel.swift" : {
+    "const-values" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/ScannerViewModel.swiftconstvalues",
+    "dependencies" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/ScannerViewModel.d",
+    "diagnostics" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/ScannerViewModel.dia",
+    "object" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/ScannerViewModel.o",
+    "swift-dependencies" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/ScannerViewModel.swiftdeps"
+  },
+  "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/Quby/Quby/Views/Components/CodeDetailSheet.swift" : {
+    "const-values" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/CodeDetailSheet.swiftconstvalues",
+    "dependencies" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/CodeDetailSheet.d",
+    "diagnostics" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/CodeDetailSheet.dia",
+    "object" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/CodeDetailSheet.o",
+    "swift-dependencies" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/CodeDetailSheet.swiftdeps"
+  },
+  "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/Quby/Quby/Views/Components/QRAppearancePickers.swift" : {
+    "const-values" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/QRAppearancePickers.swiftconstvalues",
+    "dependencies" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/QRAppearancePickers.d",
+    "diagnostics" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/QRAppearancePickers.dia",
+    "object" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/QRAppearancePickers.o",
+    "swift-dependencies" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/QRAppearancePickers.swiftdeps"
+  },
+  "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/Quby/Quby/Views/Components/QRStyleFormSections.swift" : {
+    "const-values" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/QRStyleFormSections.swiftconstvalues",
+    "dependencies" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/QRStyleFormSections.d",
+    "diagnostics" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/QRStyleFormSections.dia",
+    "object" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/QRStyleFormSections.o",
+    "swift-dependencies" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/QRStyleFormSections.swiftdeps"
+  }
+}

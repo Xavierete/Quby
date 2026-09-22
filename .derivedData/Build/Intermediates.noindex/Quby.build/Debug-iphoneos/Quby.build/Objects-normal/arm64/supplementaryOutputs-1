@@ -1,0 +1,37 @@
+{
+  "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/Quby/Quby/Models/CodeRecord.swift" : {
+    "const-values" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/CodeRecord.swiftconstvalues",
+    "dependencies" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/CodeRecord.d",
+    "diagnostics" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/CodeRecord.dia",
+    "object" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/CodeRecord.o",
+    "swift-dependencies" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/CodeRecord.swiftdeps"
+  },
+  "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/Quby/Quby/Models/DetectedCode.swift" : {
+    "const-values" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/DetectedCode.swiftconstvalues",
+    "dependencies" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/DetectedCode.d",
+    "diagnostics" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/DetectedCode.dia",
+    "object" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/DetectedCode.o",
+    "swift-dependencies" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/DetectedCode.swiftdeps"
+  },
+  "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/Quby/Quby/Models/QRStyle.swift" : {
+    "const-values" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/QRStyle.swiftconstvalues",
+    "dependencies" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/QRStyle.d",
+    "diagnostics" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/QRStyle.dia",
+    "object" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/QRStyle.o",
+    "swift-dependencies" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/QRStyle.swiftdeps"
+  },
+  "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/Quby/Quby/Models/QRType.swift" : {
+    "const-values" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/QRType.swiftconstvalues",
+    "dependencies" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/QRType.d",
+    "diagnostics" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/QRType.dia",
+    "object" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/QRType.o",
+    "swift-dependencies" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/QRType.swiftdeps"
+  },
+  "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/Quby/Quby/Models/ScannedContent.swift" : {
+    "const-values" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/ScannedContent.swiftconstvalues",
+    "dependencies" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/ScannedContent.d",
+    "diagnostics" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/ScannedContent.dia",
+    "object" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/ScannedContent.o",
+    "swift-dependencies" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/ScannedContent.swiftdeps"
+  }
+}

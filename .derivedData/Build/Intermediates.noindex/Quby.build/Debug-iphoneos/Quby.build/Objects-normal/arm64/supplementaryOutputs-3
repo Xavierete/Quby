@@ -1,0 +1,37 @@
+{
+  "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/Quby/Quby/Services/Results/LinkSafety.swift" : {
+    "const-values" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/LinkSafety.swiftconstvalues",
+    "dependencies" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/LinkSafety.d",
+    "diagnostics" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/LinkSafety.dia",
+    "object" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/LinkSafety.o",
+    "swift-dependencies" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/LinkSafety.swiftdeps"
+  },
+  "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/Quby/Quby/Services/Results/WiFiJoiner.swift" : {
+    "const-values" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/WiFiJoiner.swiftconstvalues",
+    "dependencies" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/WiFiJoiner.d",
+    "diagnostics" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/WiFiJoiner.dia",
+    "object" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/WiFiJoiner.o",
+    "swift-dependencies" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/WiFiJoiner.swiftdeps"
+  },
+  "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/Quby/Quby/Services/Scanning/CameraScanner.swift" : {
+    "const-values" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/CameraScanner.swiftconstvalues",
+    "dependencies" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/CameraScanner.d",
+    "diagnostics" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/CameraScanner.dia",
+    "object" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/CameraScanner.o",
+    "swift-dependencies" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/CameraScanner.swiftdeps"
+  },
+  "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/Quby/Quby/Services/Scanning/CodeScanPersistence.swift" : {
+    "const-values" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/CodeScanPersistence.swiftconstvalues",
+    "dependencies" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/CodeScanPersistence.d",
+    "diagnostics" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/CodeScanPersistence.dia",
+    "object" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/CodeScanPersistence.o",
+    "swift-dependencies" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/CodeScanPersistence.swiftdeps"
+  },
+  "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/Quby/Quby/Services/Scanning/PhotoQRDecoder.swift" : {
+    "const-values" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/PhotoQRDecoder.swiftconstvalues",
+    "dependencies" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/PhotoQRDecoder.d",
+    "diagnostics" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/PhotoQRDecoder.dia",
+    "object" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/PhotoQRDecoder.o",
+    "swift-dependencies" : "/Users/xavierstart/Library/Mobile Documents/com~apple~CloudDocs/GitHub/Quby/.derivedData/Build/Intermediates.noindex/Quby.build/Debug-iphoneos/Quby.build/Objects-normal/arm64/PhotoQRDecoder.swiftdeps"
+  }
+}

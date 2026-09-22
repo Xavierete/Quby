@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import UIKit
 
 struct CameraScannerView: View {
 
@@ -128,20 +129,35 @@ struct CameraScannerView: View {
                     Image(systemName: "camera.badge.ellipsis")
                         .font(.largeTitle)
                         .foregroundStyle(.secondary)
-                    Text("Quby cannot use the camera.\nYou can turn it on in Settings.")
+                    Text(ProcessInfo.processInfo.isiOSAppOnMac
+                         ? "Quby cannot use the camera.\nAllow camera access in System Settings."
+                         : "Quby cannot use the camera.\nYou can turn it on in Settings.")
                         .multilineTextAlignment(.center)
                         .foregroundStyle(.secondary)
                     Button("Open Settings") {
-                        if let url = URL(string: "app-settings:") {
-                            openURL(url)
-                        }
+                        openPrivacySettings()
                     }
                     .buttonStyle(.borderedProminent)
                 }
             }
 
         case .unavailable:
-            placeholder("No camera here.\nRun on a real device, or scan from a photo.", icon: "iphone.slash")
+            placeholder(
+                ProcessInfo.processInfo.isiOSAppOnMac
+                    ? "No camera available.\nConnect a webcam or Continuity Camera, or scan from a photo."
+                    : "No camera here.\nRun on a real device, or scan from a photo.",
+                icon: ProcessInfo.processInfo.isiOSAppOnMac ? "camera.slash" : "iphone.slash"
+            )
+        }
+    }
+
+    private func openPrivacySettings() {
+        if ProcessInfo.processInfo.isiOSAppOnMac {
+            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera") {
+                openURL(url)
+            }
+        } else if let url = URL(string: UIApplication.openSettingsURLString) {
+            openURL(url)
         }
     }
 

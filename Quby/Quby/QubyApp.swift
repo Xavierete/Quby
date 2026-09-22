@@ -38,5 +38,6 @@ struct QubyApp: App {
         }
         .modelContainer(sharedModelContainer)
         .defaultSize(width: 440, height: 680)
+        .windowResizability(.contentSize)
     }
 }

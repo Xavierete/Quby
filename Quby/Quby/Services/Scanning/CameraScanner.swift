@@ -34,29 +34,30 @@ final class CameraScanner: NSObject,
         }
     }
 
-    private func configureIfNeeded() {
-        guard !isConfigured else { return }
+    @discardableResult
+    private func configureIfNeeded() -> Bool {
+        if isConfigured { return true }
 
         session.beginConfiguration()
         defer { session.commitConfiguration() }
 
         session.sessionPreset = .hd1280x720
 
-        guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back),
+        guard let device = Self.preferredCamera(),
               let input = try? AVCaptureDeviceInput(device: device),
-              session.canAddInput(input) else { return }
+              session.canAddInput(input) else { return false }
         session.addInput(input)
         self.device = device
 
         let metadataOutput = AVCaptureMetadataOutput()
-        guard session.canAddOutput(metadataOutput) else { return }
+        guard session.canAddOutput(metadataOutput) else { return false }
         session.addOutput(metadataOutput)
         metadataOutput.setMetadataObjectsDelegate(self, queue: outputQueue)
         self.metadataOutput = metadataOutput
         applyObjectTypes()
 
         let videoOutput = AVCaptureVideoDataOutput()
-        guard session.canAddOutput(videoOutput) else { return }
+        guard session.canAddOutput(videoOutput) else { return false }
         videoOutput.alwaysDiscardsLateVideoFrames = true
         session.addOutput(videoOutput)
         videoOutput.setSampleBufferDelegate(self, queue: outputQueue)
@@ -67,13 +68,43 @@ final class CameraScanner: NSObject,
         }
 
         isConfigured = true
+        return true
     }
 
-    func start() {
+    /// Prefer the back camera on iPhone; fall back to any available video device (Mac / Continuity).
+    private static func preferredCamera() -> AVCaptureDevice? {
+        if let back = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) {
+            return back
+        }
+        if let front = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front) {
+            return front
+        }
+        if let anyDefault = AVCaptureDevice.default(for: .video) {
+            return anyDefault
+        }
+
+        let discovery = AVCaptureDevice.DiscoverySession(
+            deviceTypes: [
+                .builtInWideAngleCamera,
+                .continuityCamera,
+                .external
+            ],
+            mediaType: .video,
+            position: .unspecified
+        )
+        return discovery.devices.first
+    }
+
+    /// Starts the session. Completes on the main queue with whether a camera is available.
+    func start(completion: @escaping @MainActor (Bool) -> Void) {
         sessionQueue.async {
-            self.configureIfNeeded()
-            guard self.isConfigured, !self.session.isRunning else { return }
-            self.session.startRunning()
+            let ready = self.configureIfNeeded()
+            if ready, !self.session.isRunning {
+                self.session.startRunning()
+            }
+            DispatchQueue.main.async {
+                completion(ready)
+            }
         }
     }
 
@@ -104,9 +135,12 @@ final class CameraScanner: NSObject,
         if let device {
             return device.hasTorch && device.isTorchAvailable
         }
-        return AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back)?
-            .hasTorch == true
+        return preferredCameraHasTorch
         #endif
+    }
+
+    private var preferredCameraHasTorch: Bool {
+        Self.preferredCamera()?.hasTorch == true
     }
 
     func focus(at point: CGPoint) {

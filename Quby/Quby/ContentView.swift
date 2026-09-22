@@ -3,6 +3,9 @@ import SwiftData
 
 struct ContentView: View {
 
+    @AppStorage(SettingsKey.hasSeenGuide) private var hasSeenGuide = false
+    @State private var showGuide = false
+
     var body: some View {
         TabView {
             Tab("Create", systemImage: "qrcode") {
@@ -22,6 +25,16 @@ struct ContentView: View {
             }
         }
         .tabViewStyle(.sidebarAdaptable)
+        .task {
+            if !hasSeenGuide {
+                showGuide = true
+                hasSeenGuide = true
+            }
+        }
+        .sheet(isPresented: $showGuide) {
+            GuideView()
+                .presentationDragIndicator(.visible)
+        }
     }
 }
 

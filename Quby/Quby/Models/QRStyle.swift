@@ -17,6 +17,7 @@ enum QRModuleStyle: String, CaseIterable, Identifiable {
     case square
     case rounded
     case dots
+    case diamond
 
     var id: String { rawValue }
 
@@ -25,6 +26,7 @@ enum QRModuleStyle: String, CaseIterable, Identifiable {
         case .square: return "Square"
         case .rounded: return "Rounded"
         case .dots: return "Dots"
+        case .diamond: return "Diamond"
         }
     }
 }
@@ -48,10 +50,14 @@ enum QRCorrection: String, CaseIterable, Identifiable {
 
     var detail: String {
         switch self {
-        case .low: return "Smallest code, least tolerant of damage."
-        case .medium: return "A good balance for screens and print."
-        case .quartile: return "Survives scratches and smudges."
-        case .high: return "Densest code, needed when a logo covers the middle."
+        case .low:
+            return "Keeps the code smallest, with the least spare data if parts are damaged."
+        case .medium:
+            return "Balances size and reliability for screens and everyday printing."
+        case .quartile:
+            return "Adds spare data so scratches and smudges are less likely to break a scan."
+        case .high:
+            return "Uses the most spare data — needed when a logo covers the centre."
         }
     }
 }

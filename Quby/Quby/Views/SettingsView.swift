@@ -27,8 +27,10 @@ struct SettingsView: View {
                 Toggle(isOn: $scanSound) {
                     Label("Sound", systemImage: "speaker.wave.2")
                 }
-                Toggle(isOn: $scanHaptics) {
-                    Label("Vibration", systemImage: "iphone.radiowaves.left.and.right")
+                if !ProcessInfo.processInfo.isiOSAppOnMac {
+                    Toggle(isOn: $scanHaptics) {
+                        Label("Vibration", systemImage: "iphone.radiowaves.left.and.right")
+                    }
                 }
                 Toggle(isOn: $showDetailsAutomatically) {
                     Label("Open details", systemImage: "rectangle.portrait.and.arrow.right")
@@ -43,7 +45,9 @@ struct SettingsView: View {
                      ? "Links go straight to your browser. Anything Quby flags as risky still waits for you."
                      : (showDetailsAutomatically
                         ? "The details screen opens as soon as a code is read."
-                        : "Codes are read quietly. Tap View details when you want them."))
+                        : (ProcessInfo.processInfo.isiOSAppOnMac
+                           ? "Codes are read quietly. Open View details when you want them."
+                           : "Codes are read quietly. Tap View details when you want them.")))
             }
 
             Section {

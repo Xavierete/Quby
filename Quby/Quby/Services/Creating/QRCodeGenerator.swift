@@ -108,6 +108,15 @@ struct QRCodeGenerator {
                         let cy = y + scale / 2
                         let r = (scale / 2) - (scale * 0.06)
                         elements.append("<circle cx=\"\(cx)\" cy=\"\(cy)\" r=\"\(r)\"/>")
+                    case .diamond:
+                        let inset = scale * 0.08
+                        let left = x + inset
+                        let right = x + scale - inset
+                        let top = y + inset
+                        let bottom = y + scale - inset
+                        let cx = x + scale / 2
+                        let cy = y + scale / 2
+                        elements.append("<polygon points=\"\(cx),\(top) \(right),\(cy) \(cx),\(bottom) \(left),\(cy)\"/>")
                     }
                 }
             }
@@ -253,6 +262,16 @@ struct QRCodeGenerator {
             canvas.fillPath()
         case .dots:
             canvas.fillEllipse(in: rect.insetBy(dx: rect.width * 0.06, dy: rect.height * 0.06))
+        case .diamond:
+            let inset = rect.insetBy(dx: rect.width * 0.08, dy: rect.height * 0.08)
+            let path = CGMutablePath()
+            path.move(to: CGPoint(x: inset.midX, y: inset.minY))
+            path.addLine(to: CGPoint(x: inset.maxX, y: inset.midY))
+            path.addLine(to: CGPoint(x: inset.midX, y: inset.maxY))
+            path.addLine(to: CGPoint(x: inset.minX, y: inset.midY))
+            path.closeSubpath()
+            canvas.addPath(path)
+            canvas.fillPath()
         }
     }
 

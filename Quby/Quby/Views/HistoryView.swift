@@ -66,42 +66,52 @@ struct HistoryView: View {
     @State private var searchText = ""
     @State private var editMode: EditMode = .inactive
     @State private var selectedCodeID: PersistentIdentifier?
+    @State private var bulkSelection = Set<PersistentIdentifier>()
+    @State private var toast: String?
     @State private var confirmDelete = false
 
-    private var isEditing: Bool { editMode.isEditing }
+    private let parser = ScannedContentParser()
+    private let exporter = HistoryExporter()
+    private let clipboard = Clipboard()
 
-    private var hasNonDefaultFilters: Bool {
-        typeFilter != .all || favoritesFilter == .favoritesOnly || sortOrder != .newest
+    private var sortedRecords: [CodeRecord] {
+        switch sortOrder {
+        case .newest:
+            return records
+        case .oldest:
+            return records.reversed()
+        }
     }
 
     private var shown: [CodeRecord] {
-        let parser = ScannedContentParser()
-        let sorted = sortOrder == .newest ? records : records.reversed()
-        return sorted.filter { record in
+        sortedRecords.filter { record in
             if favoritesFilter == .favoritesOnly && !record.isFavorite { return false }
 
-            let content = parser.parse(record.value)
-
-            if !searchText.isEmpty {
-                let searchable = [
-                    record.value,
-                    content.title,
-                    rowTitle(for: content, fallback: record.value)
-                ]
-                if searchable.allSatisfy({ !$0.localizedCaseInsensitiveContains(searchText) }) {
-                    return false
-                }
+            if !searchText.isEmpty,
+               !record.value.localizedCaseInsensitiveContains(searchText),
+               !record.symbology.localizedCaseInsensitiveContains(searchText) {
+                return false
             }
 
             guard typeFilter != .all else { return true }
-            return typeFilter.matches(content)
+            return typeFilter.matches(parser.parse(record.value))
         }
+    }
+
+    private var hasNonDefaultFilters: Bool {
+        typeFilter != .all || favoritesFilter == .favoritesOnly || sortOrder != .newest
     }
 
     private var selectedRecord: CodeRecord? {
         guard let selectedCodeID else { return nil }
         return records.first { $0.persistentModelID == selectedCodeID }
     }
+
+    private var selectedRecords: [CodeRecord] {
+        shown.filter { bulkSelection.contains($0.persistentModelID) }
+    }
+
+    private var isEditing: Bool { editMode.isEditing }
 
     var body: some View {
         NavigationSplitView {
@@ -112,8 +122,12 @@ struct HistoryView: View {
             }
         }
         .navigationSplitViewStyle(.balanced)
-        .alert("Delete this code?", isPresented: $confirmDelete) {
-            Button("Delete", role: .destructive) { }
+        .overlay(alignment: .bottom) {
+            TransientToastOverlay(message: toast)
+        }
+        .animation(.easeInOut(duration: 0.2), value: toast)
+        .alert(deleteAlertTitle, isPresented: $confirmDelete) {
+            Button("Delete", role: .destructive) { deleteSelected() }
             Button("Cancel", role: .cancel) { }
         } message: {
             Text("This cannot be undone.")
@@ -122,23 +136,40 @@ struct HistoryView: View {
             if let selectedCodeID, !visibleIDs.contains(selectedCodeID) {
                 self.selectedCodeID = nil
             }
+            bulkSelection = bulkSelection.filter { visibleIDs.contains($0) }
         }
     }
 
     private var historySidebar: some View {
-        List(selection: $selectedCodeID) {
-            ForEach(shown) { record in
-                NavigationLink(value: record.persistentModelID) {
-                    row(for: record)
+        Group {
+            if isEditing {
+                List(selection: $bulkSelection) {
+                    ForEach(shown) { record in
+                        row(for: record)
+                            .tag(record.persistentModelID)
+                            .historyRowActions(
+                                favorite: { record.isFavorite.toggle() },
+                                isFavorite: record.isFavorite,
+                                delete: { delete(record) }
+                            )
+                    }
                 }
-                .historyRowActions(
-                    favorite: { record.isFavorite.toggle() },
-                    isFavorite: record.isFavorite,
-                    delete: { delete(record) }
-                )
+            } else {
+                List(selection: $selectedCodeID) {
+                    ForEach(shown) { record in
+                        NavigationLink(value: record.persistentModelID) {
+                            row(for: record)
+                        }
+                        .historyRowActions(
+                            favorite: { record.isFavorite.toggle() },
+                            isFavorite: record.isFavorite,
+                            delete: { delete(record) }
+                        )
+                    }
+                }
             }
         }
-        .navigationTitle(isEditing ? "Select codes" : "History")
+        .navigationTitle(isEditing ? selectionTitle : "History")
         .toolbarTitleDisplayMode(isEditing ? .inline : .inlineLarge)
         .navigationSplitViewColumnWidth(min: 280, ideal: 320, max: 420)
         .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search codes")
@@ -179,30 +210,26 @@ struct HistoryView: View {
         if !searchText.isEmpty {
             ContentUnavailableView.search(text: searchText)
         } else if favoritesFilter == .favoritesOnly {
-            ContentUnavailableView(
-                "No favorites",
-                systemImage: "star",
-                description: Text("Swipe a row to the right to star it.")
-            )
+            ContentUnavailableView("No favorites", systemImage: "star",
+                                   description: Text("Swipe a row to the right to star it."))
+        } else if typeFilter != .all {
+            ContentUnavailableView("No \(typeFilter.title.lowercased())",
+                                   systemImage: "line.3.horizontal.decrease.circle",
+                                   description: Text("Nothing in your history matches this filter."))
         } else {
-            ContentUnavailableView(
-                "Nothing yet",
-                systemImage: "clock",
-                description: Text("Codes you scan or create show up here.")
-            )
+            ContentUnavailableView("Nothing yet", systemImage: "clock",
+                                   description: Text("Codes you scan or create show up here."))
         }
     }
 
     private func row(for record: CodeRecord) -> some View {
-        let content = ScannedContentParser().parse(record.value)
-
-        return HStack(spacing: 12) {
-            Image(systemName: content.icon)
+        HStack(spacing: 12) {
+            Image(systemName: parser.parse(record.value).icon)
                 .foregroundStyle(.secondary)
                 .frame(width: 22)
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(rowTitle(for: content, fallback: record.value))
+                Text(record.value)
                     .lineLimit(1)
 
                 Text(record.createdAt, format: .dateTime.day().month().hour().minute())
@@ -217,28 +244,6 @@ struct HistoryView: View {
                     .symbolRenderingMode(.palette)
                     .foregroundStyle(.yellow.gradient)
             }
-        }
-    }
-
-    private func rowTitle(for content: ScannedContent, fallback: String) -> String {
-        switch content {
-        case .website(let url):
-            return url.host() ?? url.absoluteString
-        case .wifi(let ssid, _, _, _):
-            return ssid.isEmpty ? content.title : ssid
-        case .contact(let name, let phone, let email, _):
-            if !name.isEmpty { return name }
-            if !phone.isEmpty { return phone }
-            if !email.isEmpty { return email }
-            return content.title
-        case .email(let address, _, _):
-            return address.isEmpty ? content.title : address
-        case .sms(let number, _):
-            return number.isEmpty ? content.title : number
-        case .location(let latitude, let longitude):
-            return "\(latitude), \(longitude)"
-        case .text(let text):
-            return text.isEmpty ? fallback : text
         }
     }
 
@@ -262,9 +267,10 @@ struct HistoryView: View {
             withAnimation {
                 if isEditing {
                     editMode = .inactive
-                    selectedCodeID = nil
+                    bulkSelection.removeAll()
                 } else {
                     editMode = .active
+                    bulkSelection.removeAll()
                     selectedCodeID = nil
                 }
             }
@@ -278,35 +284,39 @@ struct HistoryView: View {
         } label: {
             Label("Delete", systemImage: "trash")
         }
-        .disabled(true)
+        .disabled(bulkSelection.isEmpty)
     }
 
     private var copySelectedButton: some View {
         Button {
+            copySelected()
         } label: {
             Label("Copy", systemImage: "doc.on.doc")
         }
-        .disabled(true)
+        .disabled(bulkSelection.isEmpty)
     }
 
     private var shareSelectedButton: some View {
         Menu {
-            Button {
-            } label: {
+            ShareLink(item: sharedText) {
                 Label("Share as text", systemImage: "text.alignleft")
             }
-            Button {
-            } label: {
-                Label("Export as text file", systemImage: "doc.text")
+
+            if let file = exporter.writeText(selectedRecords) {
+                ShareLink(item: file) {
+                    Label("Export as text file", systemImage: "doc.text")
+                }
             }
-            Button {
-            } label: {
-                Label("Export as CSV", systemImage: "tablecells")
+
+            if let file = exporter.writeCSV(selectedRecords) {
+                ShareLink(item: file) {
+                    Label("Export as CSV", systemImage: "tablecells")
+                }
             }
         } label: {
             Label("Share", systemImage: "square.and.arrow.up")
         }
-        .disabled(true)
+        .disabled(bulkSelection.isEmpty)
     }
 
     private var filterMenu: some View {
@@ -323,9 +333,7 @@ struct HistoryView: View {
                 Divider()
 
                 Button("Reset filters", role: .destructive) {
-                    typeFilter = .all
-                    favoritesFilter = .all
-                    sortOrder = .newest
+                    resetFilters()
                 }
             }
         } label: {
@@ -357,12 +365,62 @@ struct HistoryView: View {
         }
     }
 
+    private func resetFilters() {
+        typeFilter = .all
+        favoritesFilter = .all
+        sortOrder = .newest
+    }
+
     private func delete(_ record: CodeRecord) {
         let id = record.persistentModelID
         withAnimation {
             modelContext.delete(record)
             if selectedCodeID == id { selectedCodeID = nil }
+            bulkSelection.remove(id)
         }
+    }
+
+    private func deleteSelected() {
+        let doomed = selectedRecords
+        withAnimation {
+            for record in doomed {
+                if selectedCodeID == record.persistentModelID {
+                    selectedCodeID = nil
+                }
+                modelContext.delete(record)
+            }
+            bulkSelection.removeAll()
+        }
+    }
+
+    private func show(_ message: String) {
+        TransientMessage.present($toast, text: message)
+    }
+
+    private func copySelected() {
+        let count = bulkSelection.count
+        clipboard.copy(text: sharedText)
+        finishSelecting()
+        show(count == 1 ? "Code copied" : "\(count) codes copied")
+    }
+
+    private func finishSelecting() {
+        withAnimation {
+            bulkSelection.removeAll()
+            editMode = .inactive
+        }
+    }
+
+    private var deleteAlertTitle: String {
+        bulkSelection.count == 1 ? "Delete this code?" : "Delete \(bulkSelection.count) codes?"
+    }
+
+    private var selectionTitle: String {
+        bulkSelection.isEmpty ? "Select codes" : "\(bulkSelection.count) selected"
+    }
+
+    private var sharedText: String {
+        exporter.plainText(selectedRecords)
     }
 }
 

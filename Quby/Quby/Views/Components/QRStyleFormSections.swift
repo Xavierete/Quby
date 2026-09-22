@@ -5,6 +5,7 @@ struct QRStyleFormSections: View {
 
     @Bindable var viewModel: GeneratorViewModel
     @Binding var logoItem: PhotosPickerItem?
+    @Namespace private var correctionNamespace
 
     var body: some View {
         colourSection
@@ -67,32 +68,49 @@ struct QRStyleFormSections: View {
         Section {
             HStack(spacing: 8) {
                 ForEach(QRCorrection.allCases) { level in
+                    let isSelected = viewModel.style.correction == level
+
                     Button {
-                        viewModel.style.correction = level
+                        withAnimation(.snappy(duration: 0.28)) {
+                            viewModel.style.correction = level
+                        }
                     } label: {
                         Text(level.title)
                             .font(.caption.weight(.medium))
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 8)
-                            .background(viewModel.style.correction == level
-                                        ? Color.accentColor : Color.gray.opacity(0.12),
-                                        in: Capsule())
-                            .foregroundStyle(viewModel.style.correction == level
-                                             ? Color.white : Color.primary)
+                            .foregroundStyle(isSelected ? Color.white : Color.primary)
+                            .background {
+                                if isSelected {
+                                    Capsule()
+                                        .fill(Color.accentColor)
+                                        .matchedGeometryEffect(id: "correctionSelection", in: correctionNamespace)
+                                } else {
+                                    Capsule()
+                                        .fill(Color.gray.opacity(0.12))
+                                }
+                            }
                     }
                     .buttonStyle(.plain)
+                    .accessibilityAddTraits(isSelected ? .isSelected : [])
                 }
             }
             .opacity(viewModel.hasLogo ? 0.4 : 1)
             .disabled(viewModel.hasLogo)
 
             Text(viewModel.hasLogo
-                 ? "A logo needs the highest correction level, so it is fixed while one is set."
+                 ? "A logo needs the highest correction level, so it stays fixed while one is set."
                  : viewModel.style.correction.detail)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .contentTransition(.opacity)
+                .animation(.snappy(duration: 0.28), value: viewModel.hasLogo ? "logo" : viewModel.style.correction.rawValue)
         } header: {
             Text("Error correction")
+        } footer: {
+            Text("Adds spare data so a damaged or partly covered code can still be read.")
+                .font(.footnote)
+                .foregroundStyle(.primary)
         }
     }
 
