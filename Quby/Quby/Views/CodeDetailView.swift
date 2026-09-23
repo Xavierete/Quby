@@ -1,10 +1,20 @@
 import SwiftUI
 import ImageIO
-import UIKit
 
 struct CodeDetailView: View {
 
+    private enum DetailAction: Hashable {
+        case copyImage
+        case copyText
+        case copyPhone
+        case copySMS
+        case copyWifi
+        case saveContact
+        case joinWifi
+    }
+
     let record: CodeRecord
+    var animateContentReveal: Bool = false
 
     @State private var showPassword = false
     @State private var selectedPreviewPage: QRPreviewPage = .styled
@@ -15,12 +25,19 @@ struct CodeDetailView: View {
     @State private var confirmOpen = false
     @State private var browserLink: BrowserLink?
     @State private var showOfflineAlert = false
-    @State private var actionMessage: String?
+    @State private var confirmedAction: DetailAction?
+    @State private var errorMessage: String?
     @State private var isWorking = false
+    @State private var feedbackResetTask: Task<Void, Never>?
+    @State private var isContentReady = false
 
     private let safety = LinkSafety()
     private let clipboard = Clipboard()
     private let generator = QRCodeGenerator()
+
+    private var isLoadingContent: Bool {
+        animateContentReveal && !isContentReady
+    }
 
     private var content: ScannedContent {
         ScannedContentParser().parse(record.value)
@@ -45,8 +62,42 @@ struct CodeDetailView: View {
         }
     }
 
+    private var sharePDFURL: URL? {
+        if selectedPreviewPage == .styled, let activeBitmap {
+            return generator.writePDF(activeBitmap, named: "QRCode")
+        }
+        if let url = generator.writePDF(from: record.value, named: "QRCode") {
+            return url
+        }
+        if let activeBitmap {
+            return generator.writePDF(activeBitmap, named: "QRCode")
+        }
+        return nil
+    }
+
+    private var shareSVGURL: URL? {
+        if selectedPreviewPage == .styled, let activeBitmap {
+            return generator.writeSVG(activeBitmap, named: "QRCode")
+        }
+        if let url = generator.writeSVG(from: record.value, named: "QRCode") {
+            return url
+        }
+        if let activeBitmap {
+            return generator.writeSVG(activeBitmap, named: "QRCode")
+        }
+        return nil
+    }
+
+    private var runsOnMac: Bool {
+        #if os(macOS)
+        true
+        #else
+        ProcessInfo.processInfo.isiOSAppOnMac
+        #endif
+    }
+
     var body: some View {
-        List {
+        Form {
             Section {
                 codePreview
             }
@@ -59,55 +110,61 @@ struct CodeDetailView: View {
                     Text(content.title)
                     Spacer()
                     Text(record.createdAt, format: .dateTime.day().month().hour().minute())
+                        .foregroundStyle(.secondary)
                 }
             }
 
-            Section("Actions") {
-                actions
-                copyButtons
+            if isContentReady || !animateContentReveal {
+                Section("Actions") {
+                    actions
+                    copyButtons
 
-                if let actionMessage {
-                    Text(actionMessage)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
+                    if let errorMessage {
+                        Text(errorMessage)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
 
-                if isQRCode {
-                    Menu {
-                        ShareLink(item: record.value) {
-                            Label("Share text", systemImage: "text.alignleft")
-                        }
-                        if let activeBitmap, let png = generator.writePNG(activeBitmap, named: "QRCode") {
-                            ShareLink(item: png) {
-                                Label("PNG image", systemImage: "photo")
+                    if isQRCode {
+                        Menu {
+                            ShareLink(item: record.value) {
+                                Label("Share text", systemImage: "text.alignleft")
                             }
-                        }
-                        if selectedPreviewPage == .base || !showsBothPreviews {
-                            if let pdf = generator.writePDF(from: record.value, named: "QRCode") {
+                            if let activeBitmap, let png = generator.writePNG(activeBitmap, named: "QRCode") {
+                                ShareLink(item: png) {
+                                    Label("PNG image", systemImage: "photo")
+                                }
+                            }
+                            if let pdf = sharePDFURL {
                                 ShareLink(item: pdf) {
                                     Label("PDF document", systemImage: "doc.text")
                                 }
                             }
-                            if let svg = generator.writeSVG(from: record.value, named: "QRCode") {
+                            if let svg = shareSVGURL {
                                 ShareLink(item: svg) {
                                     Label("SVG vector", systemImage: "curlybraces")
                                 }
                             }
+                        } label: {
+                            Label("Share", systemImage: "square.and.arrow.up")
                         }
-                    } label: {
-                        Label("Share", systemImage: "square.and.arrow.up")
-                    }
-                } else {
-                    ShareLink(item: record.value) {
-                        Label("Share", systemImage: "square.and.arrow.up")
+                    } else {
+                        ShareLink(item: record.value) {
+                            Label("Share", systemImage: "square.and.arrow.up")
+                        }
                     }
                 }
+                .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
         }
+        #if os(macOS)
+        .formStyle(.grouped)
+        #endif
+        .animation(.smooth(duration: 0.7), value: isContentReady)
         .navigationTitle(content.title)
         .toolbarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: PlatformToolbar.trailing) {
                 Button {
                     record.isFavorite.toggle()
                 } label: {
@@ -118,10 +175,12 @@ struct CodeDetailView: View {
                 .accessibilityLabel(record.isFavorite ? "Remove from favorites" : "Add to favorites")
             }
         }
-        .task { makeCode() }
+        .task { await revealContent() }
         .sheet(item: $browserLink) { link in
             WebBrowserSheet(url: link.url) { browserLink = nil }
+                #if os(iOS)
                 .presentationDragIndicator(.visible)
+                #endif
         }
         .alert("No connection", isPresented: $showOfflineAlert) {
             Button("OK", role: .cancel) { }
@@ -132,18 +191,12 @@ struct CodeDetailView: View {
 
     @ViewBuilder
     private var codePreview: some View {
-        VStack(spacing: 10) {
-            if baseImage != nil || styledImage != nil {
-                QRPreviewPager(
-                    pages: visiblePreviewPages,
-                    selection: $selectedPreviewPage,
-                    side: 220,
-                    image: previewImage(for:)
-                )
-            } else {
-                ProgressView()
-                    .frame(height: 220)
-            }
+        VStack(spacing: 12) {
+            #if os(macOS)
+            macCodePreview
+            #else
+            iosCodePreview
+            #endif
 
             if record.symbology != "QR code" {
                 Text("Scanned as \(record.symbology), shown here as a QR code.")
@@ -154,7 +207,11 @@ struct CodeDetailView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 8)
+        #if os(macOS)
+        .listRowInsets(EdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 8))
+        #else
         .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
+        #endif
         .listRowBackground(Color.clear)
         .onAppear {
             if !showsBothPreviews {
@@ -162,6 +219,51 @@ struct CodeDetailView: View {
             }
         }
     }
+
+    #if os(macOS)
+    @ViewBuilder
+    private var macCodePreview: some View {
+        if baseImage != nil || styledImage != nil {
+            if showsBothPreviews {
+                Picker("Preview", selection: $selectedPreviewPage) {
+                    ForEach(visiblePreviewPages) { page in
+                        Text(page.title).tag(page)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(maxWidth: 280)
+            }
+
+            previewImage(for: selectedPreviewPage)
+                .resizable()
+                .interpolation(.none)
+                .scaledToFit()
+                .frame(width: 220, height: 220)
+                .accessibilityLabel(selectedPreviewPage.title)
+        } else {
+            ProgressView()
+                .frame(height: 220)
+        }
+    }
+    #endif
+
+    #if !os(macOS)
+    @ViewBuilder
+    private var iosCodePreview: some View {
+        if baseImage != nil || styledImage != nil {
+            QRPreviewPager(
+                pages: visiblePreviewPages,
+                selection: $selectedPreviewPage,
+                side: 220,
+                image: previewImage(for:)
+            )
+        } else {
+            ProgressView()
+                .frame(height: 220)
+        }
+    }
+    #endif
 
     private func previewImage(for page: QRPreviewPage) -> Image {
         switch page {
@@ -179,32 +281,43 @@ struct CodeDetailView: View {
             row("Domain", safety.host(of: url))
             row("Address", url.absoluteString)
 
-            ForEach(safety.warnings(for: url)) { warning in
-                Label {
-                    Text(warning.message)
-                        .font(.footnote)
-                } icon: {
-                    Image(systemName: warning.icon)
-                        .foregroundStyle(.orange)
+            if isContentReady || !animateContentReveal {
+                ForEach(safety.warnings(for: url)) { warning in
+                    Label {
+                        Text(warning.message)
+                            .font(.footnote)
+                    } icon: {
+                        Image(systemName: warning.icon)
+                            .foregroundStyle(.orange)
+                    }
                 }
             }
 
         case .wifi(let ssid, let password, let security, let isHidden):
             row("Network", ssid)
             if !password.isEmpty {
-                HStack {
+                HStack(alignment: .top, spacing: 12) {
                     Text("Password")
                         .foregroundStyle(.secondary)
-                    Spacer()
-                    Text(showPassword ? password : String(repeating: "•", count: max(password.count, 6)))
-                        .textSelection(.enabled)
-                    Button {
-                        showPassword.toggle()
-                    } label: {
-                        Image(systemName: showPassword ? "eye" : "eye.slash")
+                        .layoutPriority(1)
+                    LoadingShimmerText(
+                        text: showPassword
+                            ? password
+                            : String(repeating: "•", count: max(password.count, 6)),
+                        isLoading: isLoadingContent,
+                        multilineTextAlignment: .trailing
+                    )
+                    .selectableWhenReady(isContentReady || !animateContentReveal)
+                    if isContentReady || !animateContentReveal {
+                        Button {
+                            showPassword.toggle()
+                        } label: {
+                            Image(systemName: showPassword ? "eye" : "eye.slash")
+                                .contentTransition(.symbolEffect(.replace))
+                        }
+                        .buttonStyle(.borderless)
+                        .foregroundStyle(.secondary)
                     }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.secondary)
                 }
             }
             row("Security", security)
@@ -230,9 +343,47 @@ struct CodeDetailView: View {
             row("Longitude", String(longitude))
 
         case .text(let text):
-            Text(text)
-                .textSelection(.enabled)
+            LoadingShimmerText(
+                text: text,
+                isLoading: isLoadingContent,
+                multilineTextAlignment: .leading
+            )
+            .selectableWhenReady(isContentReady || !animateContentReveal)
         }
+
+        ForEach(extraContextFields) { field in
+            row(field.label, field.value)
+        }
+    }
+
+    private var extraContextFields: [ScanContextField] {
+        let known = knownDetailValues
+        return record.nearbyContext.filter { field in
+            let normalized = field.value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            return !known.contains(normalized)
+        }
+    }
+
+    private var knownDetailValues: Set<String> {
+        var values: Set<String> = [record.value.lowercased()]
+        switch content {
+        case .website(let url):
+            values.insert(url.absoluteString.lowercased())
+            values.insert(safety.host(of: url).lowercased())
+        case .wifi(let ssid, let password, let security, _):
+            values.formUnion([ssid, password, security].map { $0.lowercased() })
+        case .contact(let name, let phone, let email, let organization):
+            values.formUnion([name, phone, email, organization].map { $0.lowercased() })
+        case .email(let address, let subject, let body):
+            values.formUnion([address, subject, body].map { $0.lowercased() })
+        case .sms(let number, let message):
+            values.formUnion([number, message].map { $0.lowercased() })
+        case .location(let latitude, let longitude):
+            values.formUnion([String(latitude), String(longitude)].map { $0.lowercased() })
+        case .text(let text):
+            values.insert(text.lowercased())
+        }
+        return values.filter { !$0.isEmpty }
     }
 
     @ViewBuilder
@@ -265,24 +416,37 @@ struct CodeDetailView: View {
 
         case .contact(let name, let phone, let email, let organization):
             Button {
-                run { await ContactSaver().save(name: name,
-                                                phone: phone,
-                                                email: email,
-                                                organization: organization) }
+                run(.saveContact,
+                    succeedsIf: { $0.hasPrefix("Saved") }) {
+                    await ContactSaver().save(name: name,
+                                             phone: phone,
+                                             email: email,
+                                             organization: organization)
+                }
             } label: {
-                Label("Add to Contacts", systemImage: "person.crop.circle.badge.plus")
+                feedbackLabel(
+                    idle: ("Add to Contacts", "person.crop.circle.badge.plus"),
+                    done: ("Saved", "checkmark.circle"),
+                    action: .saveContact
+                )
             }
             .disabled(isWorking)
+            .animation(.snappy, value: confirmedAction)
 
-            if !ProcessInfo.processInfo.isiOSAppOnMac, let url = link("tel:", phone) {
+            if !runsOnMac, let url = link("tel:", phone) {
                 Link(destination: url) { Label("Call", systemImage: "phone") }
-            } else if ProcessInfo.processInfo.isiOSAppOnMac, !phone.isEmpty {
+            } else if runsOnMac, !phone.isEmpty {
                 Button {
                     clipboard.copy(text: phone)
-                    actionMessage = "Number copied."
+                    confirm(.copyPhone)
                 } label: {
-                    Label("Copy number", systemImage: "doc.on.doc")
+                    feedbackLabel(
+                        idle: ("Copy number", "doc.on.doc"),
+                        done: ("Copied", "checkmark"),
+                        action: .copyPhone
+                    )
                 }
+                .animation(.snappy, value: confirmedAction)
             }
             if let url = link("mailto:", email) {
                 Link(destination: url) { Label("Send email", systemImage: "envelope") }
@@ -294,13 +458,18 @@ struct CodeDetailView: View {
             }
 
         case .sms(let number, let message):
-            if ProcessInfo.processInfo.isiOSAppOnMac {
+            if runsOnMac {
                 Button {
                     clipboard.copy(text: message.isEmpty ? number : "\(number)\n\(message)")
-                    actionMessage = "Copied."
+                    confirm(.copySMS)
                 } label: {
-                    Label("Copy number", systemImage: "doc.on.doc")
+                    feedbackLabel(
+                        idle: ("Copy number", "doc.on.doc"),
+                        done: ("Copied", "checkmark"),
+                        action: .copySMS
+                    )
                 }
+                .animation(.snappy, value: confirmedAction)
             } else if let url = link("sms:", number) {
                 Link(destination: url) { Label("Send message", systemImage: "message") }
             }
@@ -311,26 +480,41 @@ struct CodeDetailView: View {
             }
 
         case .wifi(let ssid, let password, let security, let isHidden):
-            if ProcessInfo.processInfo.isiOSAppOnMac {
+            if runsOnMac {
                 Button {
                     var lines = ["Network: \(ssid)", "Security: \(security)"]
                     if !password.isEmpty { lines.insert("Password: \(password)", at: 1) }
                     if isHidden { lines.append("Hidden: Yes") }
                     clipboard.copy(text: lines.joined(separator: "\n"))
-                    actionMessage = "Wi‑Fi details copied."
+                    confirm(.copyWifi)
                 } label: {
-                    Label("Copy network details", systemImage: "doc.on.doc")
+                    feedbackLabel(
+                        idle: ("Copy network details", "doc.on.doc"),
+                        done: ("Copied", "checkmark"),
+                        action: .copyWifi
+                    )
                 }
+                .animation(.snappy, value: confirmedAction)
             } else {
                 Button {
-                    run { await WiFiJoiner().join(ssid: ssid,
-                                                  password: password,
-                                                  security: security,
-                                                  isHidden: isHidden) }
+                    run(.joinWifi,
+                        succeedsIf: {
+                            $0.hasPrefix("Joining") || $0.hasPrefix("Already connected")
+                        }) {
+                        await WiFiJoiner().join(ssid: ssid,
+                                                password: password,
+                                                security: security,
+                                                isHidden: isHidden)
+                    }
                 } label: {
-                    Label("Join network", systemImage: "wifi")
+                    feedbackLabel(
+                        idle: ("Join network", "wifi"),
+                        done: ("Joined", "checkmark"),
+                        action: .joinWifi
+                    )
                 }
                 .disabled(isWorking)
+                .animation(.snappy, value: confirmedAction)
             }
 
         case .text:
@@ -343,18 +527,28 @@ struct CodeDetailView: View {
             if isQRCode, let activeBitmap {
                 Button {
                     clipboard.copy(image: activeBitmap)
-                    actionMessage = "QR code image copied."
+                    confirm(.copyImage)
                 } label: {
-                    Label("Copy QR image", systemImage: "photo.on.rectangle")
+                    feedbackLabel(
+                        idle: ("Copy QR image", "photo.on.rectangle"),
+                        done: ("Copied", "checkmark"),
+                        action: .copyImage
+                    )
                 }
+                .animation(.snappy, value: confirmedAction)
             }
 
             Button {
                 clipboard.copy(text: record.value)
-                actionMessage = isQRCode ? "Text copied." : "Barcode number copied."
+                confirm(.copyText)
             } label: {
-                Label(isQRCode ? "Copy text" : "Copy number", systemImage: "doc.on.doc")
+                feedbackLabel(
+                    idle: (isQRCode ? "Copy text" : "Copy number", "doc.on.doc"),
+                    done: ("Copied", "checkmark"),
+                    action: .copyText
+                )
             }
+            .animation(.snappy, value: confirmedAction)
         }
     }
 
@@ -364,25 +558,86 @@ struct CodeDetailView: View {
         }
     }
 
-    private func run(_ work: @escaping () async -> String) {
+    @ViewBuilder
+    private func feedbackLabel(
+        idle: (title: String, systemImage: String),
+        done: (title: String, systemImage: String),
+        action: DetailAction
+    ) -> some View {
+        let isDone = confirmedAction == action
+        Label {
+            Text(isDone ? done.title : idle.title)
+                .contentTransition(.numericText())
+        } icon: {
+            Image(systemName: isDone ? done.systemImage : idle.systemImage)
+                .contentTransition(.symbolEffect(.replace))
+        }
+    }
+
+    private func confirm(_ action: DetailAction) {
+        errorMessage = nil
+        withAnimation(.snappy) {
+            confirmedAction = action
+        }
+        feedbackResetTask?.cancel()
+        feedbackResetTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(3.2))
+            guard !Task.isCancelled else { return }
+            withAnimation(.snappy) {
+                if confirmedAction == action {
+                    confirmedAction = nil
+                }
+            }
+        }
+    }
+
+    private func run(
+        _ action: DetailAction,
+        succeedsIf: @escaping (String) -> Bool,
+        work: @escaping () async -> String
+    ) {
         isWorking = true
-        actionMessage = nil
+        errorMessage = nil
 
         Task {
             let result = await work()
-            actionMessage = result
             isWorking = false
+            if succeedsIf(result) {
+                confirm(action)
+            } else {
+                confirmedAction = nil
+                errorMessage = result
+            }
         }
     }
 
     private func row(_ label: String, _ value: String) -> some View {
-        HStack(alignment: .firstTextBaseline) {
+        HStack(alignment: .top, spacing: 12) {
             Text(label)
                 .foregroundStyle(.secondary)
-            Spacer()
-            Text(value)
-                .multilineTextAlignment(.trailing)
-                .textSelection(.enabled)
+                .layoutPriority(1)
+            LoadingShimmerText(
+                text: value,
+                isLoading: isLoadingContent,
+                multilineTextAlignment: .trailing
+            )
+            .selectableWhenReady(isContentReady || !animateContentReveal)
+        }
+    }
+
+    private func revealContent() async {
+        if animateContentReveal {
+            isContentReady = false
+            // Build the QR early, keep shimmering a bit longer, then ease into the real text.
+            await Task.yield()
+            makeCode()
+            try? await Task.sleep(for: .milliseconds(1450))
+            withAnimation(.smooth(duration: 0.95)) {
+                isContentReady = true
+            }
+        } else {
+            makeCode()
+            isContentReady = true
         }
     }
 
@@ -416,11 +671,20 @@ struct CodeDetailView: View {
     }
 
     private static func makeCGImage(from data: Data) -> CGImage? {
-        if let source = CGImageSourceCreateWithData(data as CFData, nil),
-           let image = CGImageSourceCreateImageAtIndex(source, 0, nil) {
-            return image
-        }
-        return UIImage(data: data)?.cgImage
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+        return CGImageSourceCreateImageAtIndex(source, 0, nil)
+    }
+}
+
+#Preview("Reveal") {
+    NavigationStack {
+        CodeDetailView(
+            record: CodeRecord(
+                value: #"WIFI:T:WPA;S:Quby Cafe;P:latte\;123;H:true;;"#,
+                kind: .scanned
+            ),
+            animateContentReveal: true
+        )
     }
 }
 
@@ -430,5 +694,16 @@ struct CodeDetailView: View {
             value: #"WIFI:T:WPA;S:Quby Cafe;P:latte\;123;H:true;;"#,
             kind: .scanned
         ))
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func selectableWhenReady(_ ready: Bool) -> some View {
+        if ready {
+            textSelection(.enabled)
+        } else {
+            self
+        }
     }
 }

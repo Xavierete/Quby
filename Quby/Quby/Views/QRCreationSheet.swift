@@ -28,33 +28,26 @@ struct QRCreationSheet: View {
                 fieldsSection
                 QRStyleFormSections(viewModel: viewModel, logoItem: $logoItem)
             }
+            #if os(macOS)
+            .formStyle(.grouped)
+            .scenePadding()
+            #else
             .scrollContentBackground(.hidden)
             .background(Color(uiColor: .systemGroupedBackground))
+            #endif
             .navigationTitle(type.title)
             .toolbarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
                 }
-                ToolbarItem(placement: .bottomBar) {
-                    Button {
-                        focusedField = nil
-                        viewModel.generate(queueDetailsIfEnabled: true)
-                        dismiss()
-                    } label: {
-                        Text("Create QR code")
-                            .font(.body.weight(.bold))
-                            .foregroundStyle(Color.white)
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.glassProminent)
-                    .buttonBorderShape(.capsule)
-                    .tint(viewModel.canGenerate ? .green : .gray)
-                    .foregroundStyle(Color.white)
-                    .disabled(!viewModel.canGenerate)
+                ToolbarItem(placement: PlatformToolbar.bottomAction) {
+                    createButton
                 }
             }
+            #if os(iOS)
             .scrollDismissesKeyboard(.interactively)
+            #endif
             .onAppear { viewModel.type = type }
             .onChange(of: viewModel.input.wifiSecurity) { _, _ in resetTyping() }
             .onChange(of: logoItem) { _, newItem in
@@ -75,6 +68,36 @@ struct QRCreationSheet: View {
                 }
             }
         }
+        #if os(macOS)
+        .frame(minWidth: 420, idealWidth: 480)
+        #endif
+    }
+
+    private var createButton: some View {
+        Button {
+            focusedField = nil
+            viewModel.generate(queueDetailsIfEnabled: true)
+            dismiss()
+        } label: {
+            #if os(macOS)
+            Text("Create QR code")
+            #else
+            Text("Create QR code")
+                .font(.body.weight(.bold))
+                .foregroundStyle(Color.white)
+                .frame(maxWidth: .infinity)
+            #endif
+        }
+        #if os(macOS)
+        .buttonStyle(.borderedProminent)
+        .keyboardShortcut(.defaultAction)
+        #else
+        .buttonStyle(.glassProminent)
+        .buttonBorderShape(.capsule)
+        .tint(viewModel.canGenerate ? .green : .gray)
+        .foregroundStyle(Color.white)
+        #endif
+        .disabled(!viewModel.canGenerate)
     }
 
     @ViewBuilder
@@ -88,11 +111,11 @@ struct QRCreationSheet: View {
                 TextField("Name", text: $viewModel.input.contactName)
                     .focused($focusedField, equals: .contactName)
                 TextField("Phone", text: $viewModel.input.contactPhone)
-                    .keyboardType(.phonePad)
+                    .platformKeyboard(.phone)
                     .focused($focusedField, equals: .contactPhone)
                 TextField("Email", text: $viewModel.input.contactEmail)
-                    .keyboardType(.emailAddress)
-                    .textInputAutocapitalization(.never)
+                    .platformKeyboard(.email)
+                    .platformAutocapitalizationNever()
                     .autocorrectionDisabled()
                     .focused($focusedField, equals: .contactEmail)
                 TextField("Company (optional)", text: $viewModel.input.contactOrganization)
@@ -100,7 +123,7 @@ struct QRCreationSheet: View {
 
             case .wifi:
                 TextField("Network name (SSID)", text: $viewModel.input.wifiSSID)
-                    .textInputAutocapitalization(.never)
+                    .platformAutocapitalizationNever()
                     .autocorrectionDisabled()
                     .focused($focusedField, equals: .wifiSSID)
 
@@ -113,13 +136,16 @@ struct QRCreationSheet: View {
                         Text(security.title).tag(security)
                     }
                 }
+                #if os(macOS)
+                .pickerStyle(.menu)
+                #endif
 
                 Toggle("Hidden network", isOn: $viewModel.input.wifiHidden)
 
             case .email:
                 TextField("Email address", text: $viewModel.input.emailAddress)
-                    .keyboardType(.emailAddress)
-                    .textInputAutocapitalization(.never)
+                    .platformKeyboard(.email)
+                    .platformAutocapitalizationNever()
                     .autocorrectionDisabled()
                     .focused($focusedField, equals: .emailAddress)
                 TextField("Subject (optional)", text: $viewModel.input.emailSubject)
@@ -130,7 +156,7 @@ struct QRCreationSheet: View {
 
             case .sms:
                 TextField("Phone number", text: $viewModel.input.smsNumber)
-                    .keyboardType(.phonePad)
+                    .platformKeyboard(.phone)
                     .focused($focusedField, equals: .smsNumber)
                 TextField("Message (optional)", text: $viewModel.input.smsMessage, axis: .vertical)
                     .lineLimit(3...6)
@@ -138,10 +164,10 @@ struct QRCreationSheet: View {
 
             case .location:
                 TextField("Latitude", text: $viewModel.input.latitude)
-                    .keyboardType(.numbersAndPunctuation)
+                    .platformKeyboard(.numbersAndPunctuation)
                     .focused($focusedField, equals: .latitude)
                 TextField("Longitude", text: $viewModel.input.longitude)
-                    .keyboardType(.numbersAndPunctuation)
+                    .platformKeyboard(.numbersAndPunctuation)
                     .focused($focusedField, equals: .longitude)
             }
         } header: {
@@ -152,9 +178,9 @@ struct QRCreationSheet: View {
     private var websiteField: some View {
         HStack(spacing: 8) {
             TextField("Website address", text: $viewModel.input.website)
-                .textInputAutocapitalization(.never)
+                .platformAutocapitalizationNever()
                 .autocorrectionDisabled()
-                .keyboardType(.URL)
+                .platformKeyboard(.url)
                 .focused($focusedField, equals: .website)
 
             Button {
@@ -175,7 +201,7 @@ struct QRCreationSheet: View {
                     .foregroundStyle(didPasteWebsite ? .green : .secondary)
                     .contentTransition(.symbolEffect(.replace))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.borderless)
             .accessibilityLabel(didPasteWebsite ? "Pasted" : "Paste from clipboard")
         }
     }
@@ -189,13 +215,12 @@ struct QRCreationSheet: View {
                     .allowsHitTesting(!showPassword)
 
                 TextField("Password", text: $viewModel.input.wifiPassword)
+                    .platformAutocapitalizationNever()
+                    .autocorrectionDisabled()
                     .focused($focusedField, equals: .wifiPasswordPlain)
                     .opacity(showPassword ? 1 : 0)
                     .allowsHitTesting(showPassword)
             }
-            .textInputAutocapitalization(.never)
-            .autocorrectionDisabled()
-
             Button {
                 let wasTyping = isTypingPassword
                 withAnimation {
@@ -207,7 +232,7 @@ struct QRCreationSheet: View {
                     .foregroundStyle(.secondary)
                     .contentTransition(.symbolEffect(.replace))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.borderless)
             .accessibilityLabel(showPassword ? "Hide password" : "Show password")
         }
     }

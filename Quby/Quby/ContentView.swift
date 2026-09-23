@@ -19,9 +19,7 @@ struct ContentView: View {
             }
 
             Tab("Settings", systemImage: "gearshape") {
-                NavigationStack {
-                    SettingsView()
-                }
+                SettingsView()
             }
         }
         .tabViewStyle(.sidebarAdaptable)

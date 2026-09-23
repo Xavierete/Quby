@@ -5,7 +5,6 @@ struct QRStyleFormSections: View {
 
     @Bindable var viewModel: GeneratorViewModel
     @Binding var logoItem: PhotosPickerItem?
-    @Namespace private var correctionNamespace
 
     var body: some View {
         colourSection
@@ -17,10 +16,12 @@ struct QRStyleFormSections: View {
     private var colourSection: some View {
         Section {
             QRPaletteAppearancePicker(selection: $viewModel.style.palette)
-                .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
+                .listRowInsets(platformPickerInsets)
                 .listRowSeparator(.hidden)
+                #if os(iOS)
                 .scrollEdgeEffectHidden(true, for: .all)
                 .scrollClipDisabled()
+                #endif
         } header: {
             HStack(alignment: .firstTextBaseline) {
                 Text("Colour")
@@ -34,18 +35,18 @@ struct QRStyleFormSections: View {
             }
         } footer: {
             Text("Sets the foreground and background colours of your code.")
-                .font(.footnote)
-                .foregroundStyle(.primary)
         }
     }
 
     private var shapeSection: some View {
         Section {
             QRModuleStyleAppearancePicker(selection: $viewModel.style.module)
-                .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
+                .listRowInsets(platformPickerInsets)
                 .listRowSeparator(.hidden)
+                #if os(iOS)
                 .scrollEdgeEffectHidden(true, for: .all)
                 .scrollClipDisabled()
+                #endif
         } header: {
             HStack(alignment: .firstTextBaseline) {
                 Text("Shape")
@@ -59,65 +60,35 @@ struct QRStyleFormSections: View {
             }
         } footer: {
             Text("Changes how each module in the QR code is drawn.")
-                .font(.footnote)
-                .foregroundStyle(.primary)
         }
     }
 
     private var correctionSection: some View {
         Section {
-            HStack(spacing: 8) {
+            Picker("Level", selection: $viewModel.style.correction) {
                 ForEach(QRCorrection.allCases) { level in
-                    let isSelected = viewModel.style.correction == level
-
-                    Button {
-                        withAnimation(.snappy(duration: 0.28)) {
-                            viewModel.style.correction = level
-                        }
-                    } label: {
-                        Text(level.title)
-                            .font(.caption.weight(.medium))
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 8)
-                            .foregroundStyle(isSelected ? Color.white : Color.primary)
-                            .background {
-                                if isSelected {
-                                    Capsule()
-                                        .fill(Color.accentColor)
-                                        .matchedGeometryEffect(id: "correctionSelection", in: correctionNamespace)
-                                } else {
-                                    Capsule()
-                                        .fill(Color.gray.opacity(0.12))
-                                }
-                            }
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityAddTraits(isSelected ? .isSelected : [])
+                    Text(level.title).tag(level)
                 }
             }
-            .opacity(viewModel.hasLogo ? 0.4 : 1)
+            .pickerStyle(.segmented)
+            .labelsHidden()
             .disabled(viewModel.hasLogo)
-
-            Text(viewModel.hasLogo
-                 ? "A logo needs the highest correction level, so it stays fixed while one is set."
-                 : viewModel.style.correction.detail)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .contentTransition(.opacity)
-                .animation(.snappy(duration: 0.28), value: viewModel.hasLogo ? "logo" : viewModel.style.correction.rawValue)
+            .opacity(viewModel.hasLogo ? 0.45 : 1)
         } header: {
             Text("Error correction")
         } footer: {
-            Text("Adds spare data so a damaged or partly covered code can still be read.")
-                .font(.footnote)
-                .foregroundStyle(.primary)
+            if viewModel.hasLogo {
+                Text("A logo needs the highest correction level, so it stays fixed while one is set.")
+            } else {
+                Text(viewModel.style.correction.detail)
+            }
         }
     }
 
     private var logoSection: some View {
         Section {
             PhotosPicker(selection: $logoItem, matching: .images) {
-                Label(viewModel.hasLogo ? "Change logo" : "Add logo", systemImage: "photo.circle")
+                Label(viewModel.hasLogo ? "Change logo" : "Add logo", systemImage: "photo.badge.plus")
             }
 
             if viewModel.hasLogo {
@@ -129,5 +100,13 @@ struct QRStyleFormSections: View {
         } header: {
             Text("Logo")
         }
+    }
+
+    private var platformPickerInsets: EdgeInsets {
+        #if os(macOS)
+        EdgeInsets(top: 8, leading: 4, bottom: 8, trailing: 4)
+        #else
+        EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0)
+        #endif
     }
 }

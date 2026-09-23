@@ -1,25 +1,24 @@
 import SwiftUI
 import SwiftData
+import Photos
+#if os(iOS)
 import UIKit
+#endif
 
 struct CameraScannerView: View {
 
     @Environment(\.modelContext) private var modelContext
-    @Environment(\.dismiss) private var dismiss
-    @Environment(\.dismissWindow) private var dismissWindow
+    @Environment(\.openURL) private var openURL
 
     @State private var viewModel = ScannerViewModel()
     @State private var focusPoint: CGPoint?
-    @State private var copyMessage: String?
+    @State private var isSavedToPhotos = false
+    @State private var saveResetTask: Task<Void, Never>?
     @State private var browserLink: BrowserLink?
     @State private var showOfflineAlert = false
+    @State private var saveMessage: String?
 
-    private let clipboard = Clipboard()
     private let generator = QRCodeGenerator()
-
-    private var isPresentedInWindow: Bool {
-        ProcessInfo.processInfo.isiOSAppOnMac
-    }
 
     var body: some View {
         ZStack {
@@ -42,32 +41,30 @@ struct CameraScannerView: View {
                     }
             }
             .ignoresSafeArea()
-
-            VStack {
-                Spacer(minLength: 0)
-                scanOverlay
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            scanOverlayCard
+                .padding(.horizontal, 20)
+                .padding(.bottom, 20)
+                .ignoresSafeArea(edges: .bottom)
         }
         .navigationTitle("Scan from camera")
+        .toolbarTitleDisplayMode(.inline)
+        #if os(iOS)
         .toolbarBackground(.hidden, for: .navigationBar)
         .toolbarColorScheme(usesDarkToolbar ? .dark : .light, for: .navigationBar)
+        #endif
         .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button("Done") {
-                    closeScanner()
-                }
-            }
-
             if viewModel.hasTorch {
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem(placement: PlatformToolbar.leading) {
                     flashToolbarButton
                 }
             }
 
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: PlatformToolbar.trailing) {
                 Button {
-                    copyMessage = nil
+                    isSavedToPhotos = false
+                    saveResetTask?.cancel()
                     viewModel.clearResult()
                 } label: {
                     Image(systemName: "arrow.counterclockwise")
@@ -91,12 +88,16 @@ struct CameraScannerView: View {
             }
         }
         .onChange(of: viewModel.lastScan?.value) { _, _ in
-            copyMessage = nil
+            isSavedToPhotos = false
+            saveResetTask?.cancel()
+            saveMessage = nil
         }
         .sheet(isPresented: $viewModel.isShowingDetails, onDismiss: viewModel.detailsDismissed) {
             if let scan = viewModel.lastScan {
-                CodeDetailSheet(record: scan) { viewModel.isShowingDetails = false }
-                    .presentationDragIndicator(.visible)
+                CodeDetailSheet(record: scan, animateContentReveal: true) {
+                    viewModel.isShowingDetails = false
+                }
+                .presentationDragIndicator(.visible)
             }
         }
         .sheet(item: $browserLink) { link in
@@ -107,15 +108,6 @@ struct CameraScannerView: View {
             Button("OK", role: .cancel) { }
         } message: {
             Text("Check your internet connection and try again.")
-        }
-    }
-
-    private func closeScanner() {
-        viewModel.stop()
-        if isPresentedInWindow {
-            dismissWindow(id: QubyWindowID.cameraScanner)
-        } else {
-            dismiss()
         }
     }
 
@@ -164,50 +156,94 @@ struct CameraScannerView: View {
     }
 
     private func openPrivacySettings() {
-        if ProcessInfo.processInfo.isiOSAppOnMac {
-            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera") {
-                UIApplication.shared.open(url)
-            }
-        } else if let url = URL(string: UIApplication.openSettingsURLString) {
-            UIApplication.shared.open(url)
+        #if os(macOS)
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera") {
+            openURL(url)
         }
+        #else
+        if let url = URL(string: UIApplication.openSettingsURLString) {
+            openURL(url)
+        }
+        #endif
+    }
+
+    private var panelCollapseSpring: Animation {
+        .spring(response: 0.62, dampingFraction: 0.9)
+    }
+
+    private var overlayPhase: String {
+        if viewModel.lastScan != nil { return "result" }
+        if viewModel.message != nil || saveMessage != nil { return "message" }
+        if scanHint != nil { return "hint" }
+        return "hidden"
     }
 
     @ViewBuilder
-    private var scanOverlay: some View {
-        if let scan = viewModel.lastScan {
-            VStack(spacing: 0) {
-                Spacer(minLength: 0)
-                ScannedResultPanel(
-                    scan: scan,
-                    copyTitle: copyButtonTitle(for: scan),
-                    onViewDetails: { viewModel.isShowingDetails = true },
-                    onCopy: { copy(scan) }
-                )
-                .padding(.horizontal)
-                .padding(.top, 12)
-                .padding(.bottom, 20)
-                .frame(maxWidth: .infinity)
-                .background(.ultraThinMaterial)
+    private var scanOverlayCard: some View {
+        if overlayPhase != "hidden" {
+            VStack(alignment: .leading, spacing: 12) {
+                if let scan = viewModel.lastScan {
+                    ScannedResultPanel(
+                        scan: scan,
+                        isSavedToPhotos: isSavedToPhotos,
+                        onViewDetails: { viewModel.openDetails() },
+                        onSave: { Task { await saveToPhotos(scan) } }
+                    )
+                    .transition(.opacity)
+                } else if let message = viewModel.message ?? saveMessage {
+                    Text(message)
+                        .font(.body)
+                        .foregroundStyle(.primary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .transition(.opacity)
+                } else if let scanHint {
+                    Text(scanHint)
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .transition(.opacity)
+                }
             }
-        } else if let message = viewModel.message {
-            Text(message)
-                .foregroundStyle(.secondary)
-                .padding()
-                .frame(maxWidth: .infinity)
-                .background(.ultraThinMaterial)
-        } else if let scanHint {
-            Text(scanHint)
-                .foregroundStyle(.secondary)
-                .padding()
-                .frame(maxWidth: .infinity)
-                .background(.ultraThinMaterial)
+            .padding(.horizontal, 22)
+            .padding(.vertical, 17)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+            .animation(panelCollapseSpring, value: overlayPhase)
+            .animation(panelCollapseSpring, value: viewModel.lastScan?.value)
+            .animation(panelCollapseSpring, value: isSavedToPhotos)
         }
     }
 
-    private func copyButtonTitle(for scan: CodeRecord) -> String {
-        if let copyMessage { return copyMessage }
-        return scan.symbology.lowercased().contains("qr") ? "Copy QR code" : "Copy barcode"
+    private func saveToPhotos(_ record: CodeRecord) async {
+        guard !isSavedToPhotos else { return }
+        guard let image = generator.makeImage(from: record.value),
+              let data = generator.pngData(from: image) else { return }
+
+        let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
+        guard status == .authorized || status == .limited else {
+            saveMessage = "Photos access denied."
+            return
+        }
+
+        do {
+            try await PHPhotoLibrary.shared().performChanges {
+                let request = PHAssetCreationRequest.forAsset()
+                request.addResource(with: .photo, data: data, options: nil)
+            }
+            withAnimation(.snappy) {
+                isSavedToPhotos = true
+            }
+            saveResetTask?.cancel()
+            saveResetTask = Task { @MainActor in
+                try? await Task.sleep(for: .seconds(3.2))
+                guard !Task.isCancelled else { return }
+                withAnimation(.snappy) {
+                    isSavedToPhotos = false
+                }
+            }
+        } catch {
+            saveMessage = "Could not save the image."
+        }
     }
 
     private var scanHint: String? {
@@ -260,17 +296,6 @@ struct CameraScannerView: View {
         }
     }
 
-    private func copy(_ record: CodeRecord) {
-        if record.symbology.lowercased().contains("qr"),
-           let image = generator.makeImage(from: record.value) {
-            clipboard.copy(image: image)
-            TransientMessage.present($copyMessage, text: "QR code copied")
-        } else {
-            clipboard.copy(text: record.value)
-            TransientMessage.present($copyMessage, text: "Barcode number copied")
-        }
-    }
-
     private func showFocusRing(at point: CGPoint) {
         focusPoint = point
         Task {
@@ -283,9 +308,11 @@ struct CameraScannerView: View {
 private struct ScannedResultPanel: View {
 
     let scan: CodeRecord
-    let copyTitle: String
+    let isSavedToPhotos: Bool
     let onViewDetails: () -> Void
-    let onCopy: () -> Void
+    let onSave: () -> Void
+
+    @State private var isValueReady = false
 
     var body: some View {
         VStack(spacing: 12) {
@@ -293,18 +320,63 @@ private struct ScannedResultPanel: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            Text(scan.value)
-                .font(.callout)
-                .lineLimit(2)
+            LoadingShimmerText(
+                text: scan.value,
+                isLoading: !isValueReady,
+                font: .callout,
+                multilineTextAlignment: .center,
+                lineLimit: 2
+            )
 
-            HStack(spacing: 8) {
-                ScanCapsuleButton(title: "View details", action: onViewDetails)
-                ScanCapsuleButton(title: copyTitle, action: onCopy)
+            HStack(spacing: 12) {
+                Button(action: onSave) {
+                    Label {
+                        Text(isSavedToPhotos ? "Saved" : "Save")
+                            .contentTransition(.numericText())
+                    } icon: {
+                        Image(systemName: isSavedToPhotos
+                              ? "photo.badge.checkmark.fill"
+                              : "photo.badge.arrow.down.fill")
+                            .contentTransition(.symbolEffect(.replace))
+                    }
+                    .font(.body.weight(.semibold))
+                    .labelStyle(.titleAndIcon)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+                    .padding(.horizontal, 14)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 40)
+                    .foregroundStyle(.white)
+                    .background(Color.cyan.gradient, in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .animation(.snappy, value: isSavedToPhotos)
+
+                Button(action: onViewDetails) {
+                    Label("More", systemImage: "info.circle.fill")
+                        .font(.body.weight(.semibold))
+                        .labelStyle(.titleAndIcon)
+                        .lineLimit(1)
+                        .padding(.horizontal, 14)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 40)
+                        .foregroundStyle(.white)
+                        .background(Color.blue.gradient, in: Capsule())
+                }
+                .buttonStyle(.plain)
             }
+            .lineLimit(1)
             .padding(.top, 4)
-            .animation(.snappy, value: copyTitle)
         }
-        .frame(maxWidth: .infinity, alignment: .bottom)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .task(id: scan.value) {
+            isValueReady = false
+            await Task.yield()
+            try? await Task.sleep(for: .milliseconds(1450))
+            withAnimation(.smooth(duration: 0.95)) {
+                isValueReady = true
+            }
+        }
     }
 }
 

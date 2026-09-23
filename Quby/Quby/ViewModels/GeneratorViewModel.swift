@@ -2,7 +2,6 @@ import SwiftUI
 import SwiftData
 import Photos
 import ImageIO
-import UIKit
 
 enum QRPreviewPage: Int, CaseIterable, Identifiable {
     case styled = 0
@@ -279,10 +278,7 @@ final class GeneratorViewModel {
     }
 
     private static func makeCGImage(from data: Data) -> CGImage? {
-        if let source = CGImageSourceCreateWithData(data as CFData, nil),
-           let image = CGImageSourceCreateImageAtIndex(source, 0, nil) {
-            return image
-        }
-        return UIImage(data: data)?.cgImage
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+        return CGImageSourceCreateImageAtIndex(source, 0, nil)
     }
 }

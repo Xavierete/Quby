@@ -1,9 +1,12 @@
 import Foundation
+#if os(iOS)
 import NetworkExtension
+#endif
 
 struct WiFiJoiner {
 
     func join(ssid: String, password: String, security: String, isHidden: Bool) async -> String {
+        #if os(iOS)
         guard !ssid.isEmpty else { return "This code has no network name." }
 
         let configuration: NEHotspotConfiguration
@@ -29,8 +32,14 @@ struct WiFiJoiner {
             }
             return "Could not join: \(error.localizedDescription)"
         }
+        #else
+        _ = (password, security, isHidden)
+        guard !ssid.isEmpty else { return "This code has no network name." }
+        return "Joining Wi-Fi from a code isn’t available on Mac. Copy the password instead."
+        #endif
     }
 
+    #if os(iOS)
     private func message(for error: NEHotspotConfigurationError, ssid: String) -> String {
         switch error {
         case .alreadyAssociated:
@@ -47,4 +56,5 @@ struct WiFiJoiner {
             return "Could not join \(ssid)."
         }
     }
+    #endif
 }

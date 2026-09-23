@@ -1,5 +1,4 @@
 import SwiftUI
-import UIKit
 
 struct QRPreviewPager: View {
 
@@ -53,12 +52,14 @@ struct QRPreviewPager: View {
             .padding(.horizontal, pages.count > 1 ? -8 : 0)
 
             if pages.count > 1 {
-                NativePageControl(
+                PageDotControl(
                     numberOfPages: pages.count,
                     currentPage: currentPageIndex
                 )
                 .frame(height: 26)
+                .accessibilityElement(children: .ignore)
                 .accessibilityLabel("QR preview page")
+                .accessibilityValue("Page \((pages.firstIndex(of: selection) ?? 0) + 1) of \(pages.count)")
             }
         }
     }
@@ -87,63 +88,27 @@ struct QRPreviewPager: View {
     }
 }
 
-/// Native `UIPageControl` with the system prominent background pill.
-private struct NativePageControl: UIViewRepresentable {
+/// SwiftUI stand-in for the system prominent page control (works on iOS and Mac).
+private struct PageDotControl: View {
 
     let numberOfPages: Int
     @Binding var currentPage: Int
 
-    func makeUIView(context: Context) -> UIPageControl {
-        let control = UIPageControl()
-        control.hidesForSinglePage = true
-        control.allowsContinuousInteraction = true
-        control.addTarget(context.coordinator,
-                          action: #selector(Coordinator.valueChanged(_:)),
-                          for: .valueChanged)
-        control.setContentHuggingPriority(.required, for: .vertical)
-        control.setContentCompressionResistancePriority(.required, for: .vertical)
-        applyAppearance(to: control)
-        control.numberOfPages = numberOfPages
-        control.currentPage = currentPage
-        return control
-    }
-
-    func updateUIView(_ control: UIPageControl, context: Context) {
-        context.coordinator.currentPage = $currentPage
-        applyAppearance(to: control)
-
-        if control.numberOfPages != numberOfPages {
-            control.numberOfPages = numberOfPages
+    var body: some View {
+        HStack(spacing: 7) {
+            ForEach(0..<numberOfPages, id: \.self) { index in
+                Circle()
+                    .fill(Color.primary.opacity(index == currentPage ? 1 : 0.25))
+                    .frame(width: 7, height: 7)
+                    .frame(width: 22, height: 22)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        currentPage = index
+                    }
+            }
         }
-        if control.currentPage != currentPage {
-            control.currentPage = currentPage
-        }
-    }
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(currentPage: $currentPage)
-    }
-
-    private func applyAppearance(to control: UIPageControl) {
-        control.backgroundStyle = .prominent
-        control.currentPageIndicatorTintColor = UIColor { traits in
-            traits.userInterfaceStyle == .dark ? .white : .black
-        }
-        control.pageIndicatorTintColor = UIColor { traits in
-            let base: UIColor = traits.userInterfaceStyle == .dark ? .white : .black
-            return base.withAlphaComponent(0.25)
-        }
-    }
-
-    final class Coordinator: NSObject {
-        var currentPage: Binding<Int>
-
-        init(currentPage: Binding<Int>) {
-            self.currentPage = currentPage
-        }
-
-        @objc func valueChanged(_ sender: UIPageControl) {
-            currentPage.wrappedValue = sender.currentPage
-        }
+        .padding(.horizontal, 11)
+        .padding(.vertical, 6)
+        .background(.regularMaterial, in: Capsule())
     }
 }

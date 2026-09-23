@@ -41,7 +41,11 @@ private struct AppearancePickerLayout<Option: Identifiable & Hashable, Preview: 
     @State private var viewportWidth: CGFloat = 0
 
     private var previewSide: CGFloat {
+        #if os(macOS)
+        72
+        #else
         AppearancePickerMetrics.previewSide(for: viewportWidth)
+        #endif
     }
 
     private var tileExtent: CGFloat {
@@ -49,6 +53,37 @@ private struct AppearancePickerLayout<Option: Identifiable & Hashable, Preview: 
     }
 
     var body: some View {
+        #if os(macOS)
+        macGrid
+        #else
+        iosCarousel
+        #endif
+    }
+
+    #if os(macOS)
+    private var macGrid: some View {
+        LazyVGrid(
+            columns: [GridItem(.adaptive(minimum: 76), spacing: 10)],
+            spacing: 10
+        ) {
+            ForEach(options) { option in
+                let isSelected = selection == option
+                Button {
+                    selection = option
+                } label: {
+                    preview(option, isSelected, previewSide)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(accessibilityLabel(option))
+                .accessibilityAddTraits(isSelected ? .isSelected : [])
+            }
+        }
+        .padding(.vertical, 2)
+    }
+    #endif
+
+    #if !os(macOS)
+    private var iosCarousel: some View {
         Color.clear
             .frame(height: tileExtent)
             .onGeometryChange(for: CGFloat.self) { proxy in
@@ -97,6 +132,7 @@ private struct AppearancePickerLayout<Option: Identifiable & Hashable, Preview: 
             proxy.scrollTo(selection, anchor: .center)
         }
     }
+    #endif
 }
 
 private struct AppearancePreviewCard<Content: View>: View {
@@ -117,8 +153,8 @@ private struct AppearancePreviewCard<Content: View>: View {
             .frame(width: side, height: side)
             .overlay {
                 AppearancePickerMetrics.previewShape.strokeBorder(
-                    Color.primary,
-                    lineWidth: isSelected ? stroke : 0
+                    isSelected ? Color.accentColor : Color.clear,
+                    lineWidth: stroke
                 )
             }
             .padding(safety)
@@ -205,7 +241,7 @@ private struct QRModuleStylePreviewContent: View {
 
     var body: some View {
         Rectangle()
-            .fill(Color(uiColor: .secondarySystemGroupedBackground))
+            .fill(Color.primary.opacity(0.06))
             .overlay {
                 VStack(spacing: 3) {
                     ForEach(0..<3, id: \.self) { row in
@@ -215,16 +251,16 @@ private struct QRModuleStylePreviewContent: View {
                                     switch module {
                                     case .square:
                                         Rectangle()
-                                            .fill(Color(uiColor: .label))
+                                            .fill(Color.primary)
                                     case .rounded:
                                         RoundedRectangle(cornerRadius: 2.5, style: .continuous)
-                                            .fill(Color(uiColor: .label))
+                                            .fill(Color.primary)
                                     case .dots:
                                         Circle()
-                                            .fill(Color(uiColor: .label))
+                                            .fill(Color.primary)
                                     case .diamond:
                                         Diamond()
-                                            .fill(Color(uiColor: .label))
+                                            .fill(Color.primary)
                                             .padding(1)
                                     }
                                 }

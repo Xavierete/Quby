@@ -64,13 +64,15 @@ struct HistoryView: View {
     @State private var typeFilter: HistoryTypeFilter = .all
     @State private var sortOrder: HistorySortOrder = .newest
     @State private var searchText = ""
-    @State private var editMode: EditMode = .inactive
+    @State private var isEditing = false
     @State private var selectedCodeID: PersistentIdentifier?
     @State private var bulkSelection = Set<PersistentIdentifier>()
     @State private var toast: String?
     @State private var confirmDelete = false
+    @State private var columnVisibility: NavigationSplitViewVisibility = .all
 
     private let parser = ScannedContentParser()
+    private let safety = LinkSafety()
     private let exporter = HistoryExporter()
     private let clipboard = Clipboard()
 
@@ -98,6 +100,10 @@ struct HistoryView: View {
         }
     }
 
+    private var shownIDs: [PersistentIdentifier] {
+        shown.map(\.persistentModelID)
+    }
+
     private var hasNonDefaultFilters: Bool {
         typeFilter != .all || favoritesFilter == .favoritesOnly || sortOrder != .newest
     }
@@ -111,10 +117,16 @@ struct HistoryView: View {
         shown.filter { bulkSelection.contains($0.persistentModelID) }
     }
 
-    private var isEditing: Bool { editMode.isEditing }
+    private var runsOnMac: Bool {
+        #if os(macOS)
+        true
+        #else
+        ProcessInfo.processInfo.isiOSAppOnMac
+        #endif
+    }
 
     var body: some View {
-        NavigationSplitView {
+        NavigationSplitView(columnVisibility: $columnVisibility) {
             historySidebar
         } detail: {
             NavigationStack {
@@ -132,53 +144,74 @@ struct HistoryView: View {
         } message: {
             Text("This cannot be undone.")
         }
-        .onChange(of: shown.map(\.persistentModelID)) { _, visibleIDs in
-            if let selectedCodeID, !visibleIDs.contains(selectedCodeID) {
-                self.selectedCodeID = nil
+        .onChange(of: shownIDs) { _, visibleIDs in
+            Task { @MainActor in
+                if let selectedCodeID, !visibleIDs.contains(selectedCodeID) {
+                    self.selectedCodeID = nil
+                }
+                bulkSelection = bulkSelection.filter { visibleIDs.contains($0) }
             }
-            bulkSelection = bulkSelection.filter { visibleIDs.contains($0) }
+        }
+        .onChange(of: selectedCodeID) { _, _ in
+            columnVisibility = .all
         }
     }
 
     private var historySidebar: some View {
-        Group {
-            if isEditing {
-                List(selection: $bulkSelection) {
-                    ForEach(shown) { record in
-                        row(for: record)
-                            .tag(record.persistentModelID)
-                            .historyRowActions(
-                                favorite: { record.isFavorite.toggle() },
-                                isFavorite: record.isFavorite,
-                                delete: { delete(record) }
-                            )
-                    }
+        historyList
+            .navigationTitle(isEditing ? selectionTitle : "History")
+            #if os(macOS)
+            .toolbarTitleDisplayMode(.inline)
+            .navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 360)
+            .searchable(text: $searchText, prompt: "Search codes")
+            .listStyle(.sidebar)
+            #else
+            .toolbarTitleDisplayMode(isEditing ? .inline : .inlineLarge)
+            .navigationSplitViewColumnWidth(min: 280, ideal: 320, max: 420)
+            .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search codes")
+            .environment(\.editMode, Binding(
+                get: { isEditing ? .active : .inactive },
+                set: { isEditing = $0.isEditing }
+            ))
+            #endif
+            .toolbar { toolbarContent }
+            .overlay {
+                if shown.isEmpty {
+                    emptyState
                 }
-            } else {
-                List(selection: $selectedCodeID) {
-                    ForEach(shown) { record in
-                        NavigationLink(value: record.persistentModelID) {
-                            row(for: record)
-                        }
+            }
+    }
+
+    @ViewBuilder
+    private var historyList: some View {
+        if isEditing {
+            List(selection: $bulkSelection) {
+                ForEach(shown, id: \.persistentModelID) { record in
+                    row(for: record)
+                        .tag(record.persistentModelID)
                         .historyRowActions(
                             favorite: { record.isFavorite.toggle() },
                             isFavorite: record.isFavorite,
-                            delete: { delete(record) }
+                            delete: { delete(record) },
+                            preferContextMenuOnly: runsOnMac
                         )
-                    }
                 }
             }
-        }
-        .navigationTitle(isEditing ? selectionTitle : "History")
-        .toolbarTitleDisplayMode(isEditing ? .inline : .inlineLarge)
-        .navigationSplitViewColumnWidth(min: 280, ideal: 320, max: 420)
-        .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search codes")
-        .environment(\.editMode, $editMode)
-        .toolbar { toolbarContent }
-        .overlay {
-            if shown.isEmpty {
-                emptyState
+            .id("history-bulk")
+        } else {
+            List(selection: $selectedCodeID) {
+                ForEach(shown, id: \.persistentModelID) { record in
+                    row(for: record)
+                        .tag(record.persistentModelID)
+                        .historyRowActions(
+                            favorite: { record.isFavorite.toggle() },
+                            isFavorite: record.isFavorite,
+                            delete: { delete(record) },
+                            preferContextMenuOnly: runsOnMac
+                        )
+                }
             }
+            .id("history-single")
         }
     }
 
@@ -194,6 +227,7 @@ struct HistoryView: View {
             .toolbarTitleDisplayMode(.inline)
         } else if let selectedRecord {
             CodeDetailView(record: selectedRecord)
+                .id(selectedRecord.persistentModelID)
         } else {
             ContentUnavailableView(
                 "Select a Code",
@@ -210,8 +244,13 @@ struct HistoryView: View {
         if !searchText.isEmpty {
             ContentUnavailableView.search(text: searchText)
         } else if favoritesFilter == .favoritesOnly {
-            ContentUnavailableView("No favorites", systemImage: "star",
-                                   description: Text("Swipe a row to the right to star it."))
+            ContentUnavailableView(
+                "No favorites",
+                systemImage: "star",
+                description: Text(runsOnMac
+                                  ? "Control-click a row to star it."
+                                  : "Swipe a row to the right to star it.")
+            )
         } else if typeFilter != .all {
             ContentUnavailableView("No \(typeFilter.title.lowercased())",
                                    systemImage: "line.3.horizontal.decrease.circle",
@@ -223,8 +262,14 @@ struct HistoryView: View {
     }
 
     private func row(for record: CodeRecord) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: parser.parse(record.value).icon)
+        let content = parser.parse(record.value)
+        let isFlaggedWebsite: Bool = {
+            guard case .website(let url) = content else { return false }
+            return !safety.warnings(for: url).isEmpty
+        }()
+
+        return HStack(spacing: 12) {
+            Image(systemName: content.icon)
                 .foregroundStyle(.secondary)
                 .frame(width: 22)
 
@@ -237,26 +282,36 @@ struct HistoryView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Spacer()
+            Spacer(minLength: 8)
 
-            if record.isFavorite {
-                Image(systemName: "star.fill")
-                    .symbolRenderingMode(.palette)
-                    .foregroundStyle(.yellow.gradient)
+            HStack(spacing: 8) {
+                if isFlaggedWebsite {
+                    Image(systemName: "exclamationmark.shield.fill")
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(.white, .orange)
+                        .accessibilityLabel("Link warning")
+                }
+
+                if record.isFavorite {
+                    Image(systemName: "star.fill")
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(.yellow.gradient)
+                        .accessibilityLabel("Favorite")
+                }
             }
         }
     }
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
-        ToolbarItem(placement: .topBarLeading) {
+        ToolbarItem(placement: PlatformToolbar.leading) {
             selectButton
         }
 
         if isEditing {
-            ToolbarItem(placement: .topBarTrailing) { deleteSelectedButton }
-            ToolbarItem(placement: .topBarTrailing) { copySelectedButton }
-            ToolbarItem(placement: .topBarTrailing) { shareSelectedButton }
+            ToolbarItem(placement: PlatformToolbar.trailing) { deleteSelectedButton }
+            ToolbarItem(placement: PlatformToolbar.trailing) { copySelectedButton }
+            ToolbarItem(placement: PlatformToolbar.trailing) { shareSelectedButton }
         } else {
             ToolbarItem { filterMenu }
         }
@@ -264,27 +319,39 @@ struct HistoryView: View {
 
     private var selectButton: some View {
         Button(isEditing ? "Done" : "Select") {
-            withAnimation {
-                if isEditing {
-                    editMode = .inactive
-                    bulkSelection.removeAll()
-                } else {
-                    editMode = .active
-                    bulkSelection.removeAll()
-                    selectedCodeID = nil
-                }
+            // Avoid animating the List selection-type swap — it can trap in AppKit layout.
+            if isEditing {
+                isEditing = false
+                bulkSelection.removeAll()
+            } else {
+                isEditing = true
+                bulkSelection.removeAll()
+                selectedCodeID = nil
             }
         }
         .disabled(shown.isEmpty && !isEditing)
     }
 
     private var deleteSelectedButton: some View {
+        #if os(macOS)
+        Button("Delete", role: .destructive) {
+            confirmDelete = true
+        }
+        .disabled(bulkSelection.isEmpty)
+        #else
         Button(role: .destructive) {
             confirmDelete = true
         } label: {
-            Label("Delete", systemImage: "trash")
+            Image(systemName: "trash")
+                .fontWeight(.semibold)
+                .foregroundStyle(.white)
         }
+        .buttonStyle(.glassProminent)
+        .buttonBorderShape(.circle)
+        .tint(.red)
         .disabled(bulkSelection.isEmpty)
+        .accessibilityLabel("Delete")
+        #endif
     }
 
     private var copySelectedButton: some View {
@@ -321,7 +388,7 @@ struct HistoryView: View {
 
     private var filterMenu: some View {
         Menu {
-            if ProcessInfo.processInfo.isiOSAppOnMac {
+            if runsOnMac {
                 macFilterSections
             } else {
                 HistoryTypeFilterSubmenu(selection: $typeFilter)
@@ -333,7 +400,9 @@ struct HistoryView: View {
                 Divider()
 
                 Button("Reset filters", role: .destructive) {
-                    resetFilters()
+                    withAnimation(.smooth(duration: 0.35)) {
+                        resetFilters()
+                    }
                 }
             }
         } label: {
@@ -342,6 +411,7 @@ struct HistoryView: View {
                   : "line.3.horizontal.decrease.circle")
             .foregroundStyle(hasNonDefaultFilters ? Color.accentColor : Color.primary)
         }
+        .help("Filter and sort history")
     }
 
     @ViewBuilder
@@ -373,23 +443,20 @@ struct HistoryView: View {
 
     private func delete(_ record: CodeRecord) {
         let id = record.persistentModelID
-        withAnimation {
-            modelContext.delete(record)
-            if selectedCodeID == id { selectedCodeID = nil }
-            bulkSelection.remove(id)
-        }
+        if selectedCodeID == id { selectedCodeID = nil }
+        bulkSelection.remove(id)
+        modelContext.delete(record)
     }
 
     private func deleteSelected() {
         let doomed = selectedRecords
-        withAnimation {
-            for record in doomed {
-                if selectedCodeID == record.persistentModelID {
-                    selectedCodeID = nil
-                }
-                modelContext.delete(record)
-            }
-            bulkSelection.removeAll()
+        let doomedIDs = Set(doomed.map(\.persistentModelID))
+        if let selectedCodeID, doomedIDs.contains(selectedCodeID) {
+            self.selectedCodeID = nil
+        }
+        bulkSelection.subtract(doomedIDs)
+        for record in doomed {
+            modelContext.delete(record)
         }
     }
 
@@ -405,10 +472,8 @@ struct HistoryView: View {
     }
 
     private func finishSelecting() {
-        withAnimation {
-            bulkSelection.removeAll()
-            editMode = .inactive
-        }
+        bulkSelection.removeAll()
+        isEditing = false
     }
 
     private var deleteAlertTitle: String {
@@ -425,31 +490,43 @@ struct HistoryView: View {
 }
 
 private extension View {
+    @ViewBuilder
     func historyRowActions(
         favorite: @escaping () -> Void,
         isFavorite: Bool,
-        delete: @escaping () -> Void
+        delete: @escaping () -> Void,
+        preferContextMenuOnly: Bool = false
     ) -> some View {
-        self
-            .swipeActions(edge: .trailing) {
-                Button(role: .destructive, action: delete) {
-                    Label("Delete", systemImage: "trash")
-                }
-            }
-            .swipeActions(edge: .leading) {
-                Button(action: favorite) {
-                    Label(isFavorite ? "Unfavorite" : "Favorite",
-                          systemImage: isFavorite ? "star.slash" : "star")
-                }
-                .tint(.yellow)
-            }
-            .contextMenu {
+        if preferContextMenuOnly {
+            self.contextMenu {
                 Button(action: favorite) {
                     Label(isFavorite ? "Remove from favorites" : "Add to favorites",
                           systemImage: isFavorite ? "star.slash" : "star")
                 }
                 Button("Delete", systemImage: "trash", role: .destructive, action: delete)
             }
+        } else {
+            self
+                .swipeActions(edge: .trailing) {
+                    Button(role: .destructive, action: delete) {
+                        Label("Delete", systemImage: "trash")
+                    }
+                }
+                .swipeActions(edge: .leading) {
+                    Button(action: favorite) {
+                        Label(isFavorite ? "Unfavorite" : "Favorite",
+                              systemImage: isFavorite ? "star.slash" : "star")
+                    }
+                    .tint(.yellow)
+                }
+                .contextMenu {
+                    Button(action: favorite) {
+                        Label(isFavorite ? "Remove from favorites" : "Add to favorites",
+                              systemImage: isFavorite ? "star.slash" : "star")
+                    }
+                    Button("Delete", systemImage: "trash", role: .destructive, action: delete)
+                }
+        }
     }
 }
 

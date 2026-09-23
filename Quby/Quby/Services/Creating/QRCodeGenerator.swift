@@ -361,4 +361,46 @@ struct QRCodeGenerator {
             return nil
         }
     }
+
+    func writePDF(_ image: CGImage, named name: String = "QRCode") -> URL? {
+        let width = CGFloat(image.width)
+        let height = CGFloat(image.height)
+        let data = NSMutableData()
+        guard let consumer = CGDataConsumer(data: data as CFMutableData) else { return nil }
+
+        var mediaBox = CGRect(x: 0, y: 0, width: width, height: height)
+        guard let canvas = CGContext(consumer: consumer, mediaBox: &mediaBox, nil) else { return nil }
+
+        canvas.beginPage(mediaBox: &mediaBox)
+        canvas.draw(image, in: mediaBox)
+        canvas.endPage()
+        canvas.closePDF()
+
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(name).pdf")
+        do {
+            try (data as Data).write(to: url)
+            return url
+        } catch {
+            return nil
+        }
+    }
+
+    func writeSVG(_ image: CGImage, named name: String = "QRCode") -> URL? {
+        guard let png = pngData(from: image) else { return nil }
+        let base64 = png.base64EncodedString()
+        let width = image.width
+        let height = image.height
+        let svg = """
+        <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="\(width)" height="\(height)" viewBox="0 0 \(width) \(height)">
+          <image width="\(width)" height="\(height)" href="data:image/png;base64,\(base64)"/>
+        </svg>
+        """
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(name).svg")
+        do {
+            try svg.write(to: url, atomically: true, encoding: .utf8)
+            return url
+        } catch {
+            return nil
+        }
+    }
 }

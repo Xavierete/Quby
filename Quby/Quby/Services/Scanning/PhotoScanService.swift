@@ -11,7 +11,7 @@ struct PhotoScanService {
             return .failure("No code found in that image.")
         }
 
-        let record = persistence.save(code, in: modelContext)
+        let record = persistence.save(code, in: modelContext, source: .photo)
 
         if let url = persistence.websiteToOpenAutomatically(code.value) {
             return .openURL(url)

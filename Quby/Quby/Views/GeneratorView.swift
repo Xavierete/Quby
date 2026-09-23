@@ -76,7 +76,7 @@ struct GeneratorView: View {
         .navigationTitle("Create")
         .toolbarTitleDisplayMode(.inlineLarge)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: PlatformToolbar.trailing) {
                 Menu {
                     Button {
                         openCameraScanner()
@@ -95,12 +95,14 @@ struct GeneratorView: View {
         }
         .sheet(item: $activeCreationType, onDismiss: presentCreatedFollowUpIfNeeded) { type in
             QRCreationSheet(type: type, viewModel: viewModel)
+                #if os(iOS)
                 .presentationDragIndicator(.visible)
+                #endif
                 .presentationSizing(.form)
         }
         .photosPicker(isPresented: $showPhotoPicker, selection: $scanPhotoItem, matching: .images)
         .sheet(item: $photoScanRecord) { record in
-            CodeDetailSheet(record: record) { photoScanRecord = nil }
+            CodeDetailSheet(record: record, animateContentReveal: true) { photoScanRecord = nil }
                 .presentationDragIndicator(.visible)
         }
         .sheet(item: $createdDetailRecord) { record in

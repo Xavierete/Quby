@@ -1,6 +1,9 @@
 import AVFoundation
 import CoreImage
 
+/// Live camera scanner using AVFoundation metadata output (Apple's recommended
+/// path for custom camera UI). Nearby context is enriched with Vision's
+/// `RecognizeDocumentsRequest` on a captured frame.
 final class CameraScanner: NSObject,
                            AVCaptureMetadataOutputObjectsDelegate,
                            AVCaptureVideoDataOutputSampleBufferDelegate,
@@ -8,14 +11,19 @@ final class CameraScanner: NSObject,
 
     var onCodeFound: ((DetectedCode) -> Void)?
     var onFrame: ((CGImage) -> Void)?
+    var onContextEnriched: ((String, [ScanContextField]) -> Void)?
 
     private let session = AVCaptureSession()
-    private let context = CIContext()
+    private let context = CIContext(options: [.useSoftwareRenderer: false])
     private let sessionQueue = DispatchQueue(label: "quby.camera.session")
-    private let outputQueue = DispatchQueue(label: "quby.camera.output")
+    private let outputQueue = DispatchQueue(label: "quby.camera.output", qos: .userInitiated)
     private var device: AVCaptureDevice?
     private var metadataOutput: AVCaptureMetadataOutput?
     private var isConfigured = false
+    private var latestFrame: CGImage?
+    private var lastPreviewPublishTime = CFAbsoluteTimeGetCurrent()
+    private let contextExtractor = NearbyScanContextExtractor()
+    private var enrichingValue: String?
 
     private static let wantedObjectTypes: [AVMetadataObject.ObjectType] = [
         .qr, .microQR, .aztec, .dataMatrix, .pdf417, .microPDF417,
@@ -59,12 +67,17 @@ final class CameraScanner: NSObject,
         let videoOutput = AVCaptureVideoDataOutput()
         guard session.canAddOutput(videoOutput) else { return false }
         videoOutput.alwaysDiscardsLateVideoFrames = true
+        videoOutput.videoSettings = [
+            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarFullRange
+        ]
         session.addOutput(videoOutput)
         videoOutput.setSampleBufferDelegate(self, queue: outputQueue)
 
-        if let connection = videoOutput.connection(with: .video),
-           connection.isVideoRotationAngleSupported(90) {
-            connection.videoRotationAngle = 90
+        if let connection = videoOutput.connection(with: .video) {
+            let angle: CGFloat = 90
+            if connection.isVideoRotationAngleSupported(angle) {
+                connection.videoRotationAngle = angle
+            }
         }
 
         isConfigured = true
@@ -113,6 +126,10 @@ final class CameraScanner: NSObject,
             self.setTorchOnSessionQueue(false)
             guard self.session.isRunning else { return }
             self.session.stopRunning()
+            DispatchQueue.main.async {
+                self.latestFrame = nil
+                self.enrichingValue = nil
+            }
         }
     }
 
@@ -180,7 +197,25 @@ final class CameraScanner: NSObject,
 
         let code = DetectedCode(value: value, symbology: Self.label(for: object.type))
         DispatchQueue.main.async {
+            let frame = self.latestFrame
             self.onCodeFound?(code)
+            self.enrichContext(for: value, frame: frame)
+        }
+    }
+
+    private func enrichContext(for value: String, frame: CGImage?) {
+        guard let frame else { return }
+        guard enrichingValue != value else { return }
+        enrichingValue = value
+
+        Task(priority: .utility) {
+            let fields = await self.contextExtractor.extract(from: frame, codeValue: value)
+            await MainActor.run {
+                guard self.enrichingValue == value else { return }
+                self.enrichingValue = nil
+                guard !fields.isEmpty else { return }
+                self.onContextEnriched?(value, fields)
+            }
         }
     }
 
@@ -216,6 +251,10 @@ final class CameraScanner: NSObject,
         guard let cgImage = context.createCGImage(ciImage, from: ciImage.extent) else { return }
 
         DispatchQueue.main.async {
+            self.latestFrame = cgImage
+            let now = CFAbsoluteTimeGetCurrent()
+            guard now - self.lastPreviewPublishTime >= (1.0 / 15.0) else { return }
+            self.lastPreviewPublishTime = now
             self.onFrame?(cgImage)
         }
     }

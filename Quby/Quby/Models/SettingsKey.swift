@@ -6,6 +6,7 @@ enum SettingsKey {
     static let showDetailsAutomatically = "settings.showDetailsAutomatically"
     static let openWebsitesAutomatically = "settings.openWebsitesAutomatically"
     static let saveHistory = "settings.saveHistory"
+    static let saveCameraScans = "settings.saveCameraScans"
     static let hasSeenGuide = "settings.hasSeenGuide"
 
     static func registerDefaults() {
@@ -15,6 +16,7 @@ enum SettingsKey {
             showDetailsAutomatically: false,
             openWebsitesAutomatically: false,
             saveHistory: true,
+            saveCameraScans: true,
             hasSeenGuide: false
         ])
     }

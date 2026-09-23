@@ -10,20 +10,39 @@ enum PhotoScanOutcome {
 
 struct CodeScanPersistence {
 
+    enum Source {
+        case camera
+        case photo
+    }
+
     private let parser = ScannedContentParser()
     private let safety = LinkSafety()
     private let sound = SoundPlayer()
 
     @discardableResult
-    func save(_ code: DetectedCode, in modelContext: ModelContext?) -> CodeRecord {
-        let record = CodeRecord(value: code.value, kind: .scanned, symbology: code.symbology)
-        if SettingsKey.isOn(SettingsKey.saveHistory) {
+    func save(_ code: DetectedCode, in modelContext: ModelContext?, source: Source) -> CodeRecord {
+        let record = CodeRecord(
+            value: code.value,
+            kind: .scanned,
+            symbology: code.symbology,
+            nearbyContext: code.context
+        )
+        if shouldSaveToHistory(source) {
             modelContext?.insert(record)
         }
         if SettingsKey.isOn(SettingsKey.scanSound) {
             sound.playScanSound()
         }
         return record
+    }
+
+    private func shouldSaveToHistory(_ source: Source) -> Bool {
+        switch source {
+        case .camera:
+            return SettingsKey.isOn(SettingsKey.saveCameraScans)
+        case .photo:
+            return SettingsKey.isOn(SettingsKey.saveHistory)
+        }
     }
 
     func websiteToOpenAutomatically(_ value: String) -> URL? {

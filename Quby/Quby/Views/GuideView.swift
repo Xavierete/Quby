@@ -52,6 +52,7 @@ struct GuideView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
+                #if os(iOS)
                 TabView(selection: $currentStep) {
                     ForEach(slides) { slide in
                         slideView(for: slide)
@@ -60,6 +61,11 @@ struct GuideView: View {
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
                 .animation(.smooth, value: currentStep)
+                #else
+                slideView(for: slides[currentStep])
+                    .id(currentStep)
+                    .animation(.smooth, value: currentStep)
+                #endif
 
                 footerControls
             }

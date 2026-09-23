@@ -33,6 +33,9 @@ final class ScannerViewModel {
         scanner.onCodeFound = { [weak self] code in
             self?.handle(code)
         }
+        scanner.onContextEnriched = { [weak self] value, fields in
+            self?.applyContext(value: value, fields: fields)
+        }
         scanner.onFrame = { [weak self] cgImage in
             self?.previewFrame = Image(decorative: cgImage, scale: 1)
             self?.previewAspect = CGFloat(cgImage.width) / CGFloat(cgImage.height)
@@ -113,6 +116,7 @@ final class ScannerViewModel {
 
     private func handle(_ code: DetectedCode) {
         guard lastScan?.value != code.value else { return }
+        guard !isShowingDetails else { return }
 
         persistScan(code)
 
@@ -122,13 +126,12 @@ final class ScannerViewModel {
         }
 
         guard SettingsKey.isOn(SettingsKey.showDetailsAutomatically) else { return }
-        scanner.stop()
-        isShowingDetails = true
+        openDetails()
     }
 
     @discardableResult
     private func persistScan(_ code: DetectedCode) -> CodeRecord {
-        let record = persistence.save(code, in: modelContext)
+        let record = persistence.save(code, in: modelContext, source: .camera)
         lastScan = record
 
         if SettingsKey.isOn(SettingsKey.scanHaptics) {
@@ -138,21 +141,51 @@ final class ScannerViewModel {
         return record
     }
 
+    private func applyContext(value: String, fields: [ScanContextField]) {
+        guard let lastScan, lastScan.value == value else { return }
+        lastScan.nearbyContext = fields
+    }
+
     func autoOpenHandled() {
         autoOpenURL = nil
     }
 
+    /// Opens details and stops camera detection until the sheet is dismissed.
+    func openDetails() {
+        guard lastScan != nil else { return }
+        guard !isShowingDetails else { return }
+        isShowingDetails = true
+        pauseDetection()
+    }
+
     func detailsDismissed() {
         isShowingDetails = false
-        guard status == .scanning else { return }
+        resumeDetection()
+    }
+
+    private func pauseDetection() {
+        scanner.stop()
+        isTorchOn = false
+        // Keep the last preview frame while details are open.
+        if status == .scanning {
+            status = .idle
+        }
+    }
+
+    private func resumeDetection() {
+        #if targetEnvironment(simulator)
+        return
+        #else
         scanner.start { [weak self] ready in
             guard let self else { return }
-            if !ready {
+            if ready {
+                self.status = .scanning
+                self.hasTorch = self.scanner.hasTorch
+            } else {
                 self.status = .unavailable
                 self.hasTorch = false
-            } else {
-                self.hasTorch = self.scanner.hasTorch
             }
         }
+        #endif
     }
 }
