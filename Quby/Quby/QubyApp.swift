@@ -34,10 +34,15 @@ struct QubyApp: App {
         WindowGroup(id: QubyWindowID.cameraScanner) {
             NavigationStack {
                 CameraScannerView()
+                    #if os(macOS)
+                    .frame(minWidth: 420, idealWidth: 480, minHeight: 560, idealHeight: 680)
+                    #endif
             }
         }
         .modelContainer(sharedModelContainer)
-        .defaultSize(width: 440, height: 680)
-        .windowResizability(.contentSize)
+        .defaultSize(width: 480, height: 680)
+        #if os(macOS)
+        .windowResizability(.contentMinSize)
+        #endif
     }
 }

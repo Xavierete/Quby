@@ -95,7 +95,12 @@ final class ScannerViewModel {
         let x = (point.x + (filledWidth - size.width) / 2) / filledWidth
         let y = (point.y + (filledHeight - size.height) / 2) / filledHeight
 
+        #if os(iOS)
+        // Preview is rotated 90° relative to the sensor on iPhone.
         scanner.focus(at: CGPoint(x: y, y: 1 - x))
+        #else
+        scanner.focus(at: CGPoint(x: x, y: y))
+        #endif
     }
 
     func scanPhoto(_ item: PhotosPickerItem?) async -> PhotoScanOutcome {

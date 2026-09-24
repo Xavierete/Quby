@@ -31,7 +31,12 @@ struct ContentView: View {
         }
         .sheet(isPresented: $showGuide) {
             GuideView()
+                #if os(iOS)
                 .presentationDragIndicator(.visible)
+                #endif
+                #if os(macOS)
+                .frame(minWidth: 420, idealWidth: 480, minHeight: 520)
+                #endif
         }
     }
 }

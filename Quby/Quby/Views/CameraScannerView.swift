@@ -20,6 +20,14 @@ struct CameraScannerView: View {
 
     private let generator = QRCodeGenerator()
 
+    private var runsOnMac: Bool {
+        #if os(macOS)
+        true
+        #else
+        ProcessInfo.processInfo.isiOSAppOnMac
+        #endif
+    }
+
     var body: some View {
         ZStack {
             GeometryReader { proxy in
@@ -97,12 +105,16 @@ struct CameraScannerView: View {
                 CodeDetailSheet(record: scan, animateContentReveal: true) {
                     viewModel.isShowingDetails = false
                 }
+                #if os(iOS)
                 .presentationDragIndicator(.visible)
+                #endif
             }
         }
         .sheet(item: $browserLink) { link in
             WebBrowserSheet(url: link.url) { browserLink = nil }
+                #if os(iOS)
                 .presentationDragIndicator(.visible)
+                #endif
         }
         .alert("No connection", isPresented: $showOfflineAlert) {
             Button("OK", role: .cancel) { }
@@ -133,7 +145,7 @@ struct CameraScannerView: View {
                     Image(systemName: "camera.badge.ellipsis")
                         .font(.largeTitle)
                         .foregroundStyle(.secondary)
-                    Text(ProcessInfo.processInfo.isiOSAppOnMac
+                    Text(runsOnMac
                          ? "Quby cannot use the camera.\nAllow camera access in System Settings."
                          : "Quby cannot use the camera.\nYou can turn it on in Settings.")
                         .multilineTextAlignment(.center)
@@ -147,10 +159,10 @@ struct CameraScannerView: View {
 
         case .unavailable:
             placeholder(
-                ProcessInfo.processInfo.isiOSAppOnMac
+                runsOnMac
                     ? "No camera available.\nConnect a webcam or Continuity Camera, or scan from a photo."
                     : "No camera here.\nRun on a real device, or scan from a photo.",
-                icon: ProcessInfo.processInfo.isiOSAppOnMac ? "camera.slash" : "iphone.slash"
+                icon: runsOnMac ? "camera.slash" : "iphone.slash"
             )
         }
     }

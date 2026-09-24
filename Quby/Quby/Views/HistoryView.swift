@@ -126,6 +126,52 @@ struct HistoryView: View {
     }
 
     var body: some View {
+        #if os(macOS)
+        macHistoryBody
+        #else
+        iosHistoryBody
+        #endif
+    }
+
+    #if os(macOS)
+    /// Tab sidebar stays owned by `TabView`; this is list | detail only (no nested split sidebar).
+    private var macHistoryBody: some View {
+        HStack(spacing: 0) {
+            NavigationStack {
+                historySidebar
+            }
+            .frame(minWidth: 240, idealWidth: 280, maxWidth: 340)
+
+            Divider()
+
+            NavigationStack {
+                historyDetail
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .overlay(alignment: .bottom) {
+            TransientToastOverlay(message: toast)
+        }
+        .animation(.easeInOut(duration: 0.2), value: toast)
+        .alert(deleteAlertTitle, isPresented: $confirmDelete) {
+            Button("Delete", role: .destructive) { deleteSelected() }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("This cannot be undone.")
+        }
+        .onChange(of: shownIDs) { _, visibleIDs in
+            Task { @MainActor in
+                if let selectedCodeID, !visibleIDs.contains(selectedCodeID) {
+                    self.selectedCodeID = nil
+                }
+                bulkSelection = bulkSelection.filter { visibleIDs.contains($0) }
+            }
+        }
+    }
+    #endif
+
+    #if !os(macOS)
+    private var iosHistoryBody: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             historySidebar
         } detail: {
@@ -156,13 +202,13 @@ struct HistoryView: View {
             columnVisibility = .all
         }
     }
+    #endif
 
     private var historySidebar: some View {
         historyList
             .navigationTitle(isEditing ? selectionTitle : "History")
             #if os(macOS)
             .toolbarTitleDisplayMode(.inline)
-            .navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 360)
             .searchable(text: $searchText, prompt: "Search codes")
             .listStyle(.sidebar)
             #else

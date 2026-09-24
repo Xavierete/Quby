@@ -11,9 +11,11 @@ struct GeneratorView: View {
     @State private var viewModel = GeneratorViewModel()
     @State private var photoScanner = ScannerViewModel()
     @State private var activeCreationType: QRType?
-    @State private var showCameraScanner = false
     @State private var showPhotoPicker = false
     @State private var scanPhotoItem: PhotosPickerItem?
+    #if os(iOS)
+    @State private var showCameraScanner = false
+    #endif
     @State private var photoScanRecord: CodeRecord?
     @State private var createdDetailRecord: CodeRecord?
     @State private var browserLink: BrowserLink?
@@ -25,10 +27,6 @@ struct GeneratorView: View {
 
     private let gridSpacing: CGFloat = 12
     private let resultID = "qrResult"
-
-    private var opensCameraInWindow: Bool {
-        ProcessInfo.processInfo.isiOSAppOnMac
-    }
 
     private var typeColumns: [GridItem] {
         Array(repeating: GridItem(.flexible(), spacing: gridSpacing), count: 3)
@@ -103,16 +101,23 @@ struct GeneratorView: View {
         .photosPicker(isPresented: $showPhotoPicker, selection: $scanPhotoItem, matching: .images)
         .sheet(item: $photoScanRecord) { record in
             CodeDetailSheet(record: record, animateContentReveal: true) { photoScanRecord = nil }
+                #if os(iOS)
                 .presentationDragIndicator(.visible)
+                #endif
         }
         .sheet(item: $createdDetailRecord) { record in
             CodeDetailSheet(record: record) { createdDetailRecord = nil }
+                #if os(iOS)
                 .presentationDragIndicator(.visible)
+                #endif
         }
         .sheet(item: $browserLink) { link in
             WebBrowserSheet(url: link.url) { browserLink = nil }
+                #if os(iOS)
                 .presentationDragIndicator(.visible)
+                #endif
         }
+        #if os(iOS)
         .sheet(isPresented: $showCameraScanner) {
             NavigationStack {
                 CameraScannerView()
@@ -120,6 +125,7 @@ struct GeneratorView: View {
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
         }
+        #endif
         .alert("Could not scan photo", isPresented: $showPhotoScanError) {
             Button("OK", role: .cancel) { }
         } message: {
@@ -177,11 +183,15 @@ struct GeneratorView: View {
     }
 
     private func openCameraScanner() {
-        if opensCameraInWindow {
+        #if os(macOS)
+        openWindow(id: QubyWindowID.cameraScanner)
+        #else
+        if ProcessInfo.processInfo.isiOSAppOnMac {
             openWindow(id: QubyWindowID.cameraScanner)
         } else {
             showCameraScanner = true
         }
+        #endif
     }
 
     private var typeButtons: some View {

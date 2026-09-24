@@ -1,22 +1,28 @@
 {
   "fill" : {
-    "automatic-gradient" : "extended-gray:1.00000,1.00000"
+    "automatic-gradient" : "extended-srgb:0.00000,0.76471,0.81569,1.00000"
   },
   "groups" : [
     {
+      "hidden" : false,
       "layers" : [
         {
-          "image-name" : "c9d010af-a2f9-49ca-80d3-7d3a18f4991c.png",
-          "name" : "c9d010af-a2f9-49ca-80d3-7d3a18f4991c",
+          "blend-mode" : "normal",
+          "fill" : "automatic",
+          "glass" : true,
+          "hidden" : false,
+          "image-name" : "QUBYin 2.svg",
+          "name" : "Letters",
           "position" : {
-            "scale" : 1,
+            "scale" : 1.15,
             "translation-in-points" : [
-              113,
-              43
+              0.7020733840645335,
+              -11.47347038693465
             ]
           }
         }
       ],
+      "name" : "Group",
       "shadow" : {
         "kind" : "neutral",
         "opacity" : 0.5

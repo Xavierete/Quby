@@ -74,7 +74,12 @@ final class CameraScanner: NSObject,
         videoOutput.setSampleBufferDelegate(self, queue: outputQueue)
 
         if let connection = videoOutput.connection(with: .video) {
+            #if os(iOS)
             let angle: CGFloat = 90
+            #else
+            // Webcams / Continuity Camera already deliver upright landscape frames.
+            let angle: CGFloat = 0
+            #endif
             if connection.isVideoRotationAngleSupported(angle) {
                 connection.videoRotationAngle = angle
             }

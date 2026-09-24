@@ -7,7 +7,11 @@ struct ContactSaver {
 
         do {
             guard try await store.requestAccess(for: .contacts) else {
+                #if os(macOS)
+                return "Contacts access denied. You can turn it on in System Settings."
+                #else
                 return "Contacts access denied. You can turn it on in Settings."
+                #endif
             }
         } catch {
             return "Could not ask for Contacts access."
