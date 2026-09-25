@@ -111,9 +111,7 @@ struct HistoryExporter {
         do {
             let data = try ExcelWorkbookBuilder(records: records, images: [], parser: parser)
                 .build()
-            let url = FileManager.default.temporaryDirectory.appendingPathComponent("Quby codes.xlsx")
-            try data.write(to: url, options: .atomic)
-            return url
+            return write(data: data, named: "Quby codes.xlsx")
         } catch {
             return nil
         }
@@ -127,9 +125,7 @@ struct HistoryExporter {
         do {
             let data = try ExcelWorkbookBuilder(records: records, images: images, parser: parser)
                 .build()
-            let url = FileManager.default.temporaryDirectory.appendingPathComponent("Quby codes.xlsx")
-            try data.write(to: url, options: .atomic)
-            return url
+            return write(data: data, named: "Quby codes with images.xlsx")
         } catch {
             return nil
         }
@@ -137,33 +133,31 @@ struct HistoryExporter {
 
     /// PDF table without QR images.
     func writePDF(_ records: [CodeRecord]) -> URL? {
-        writePDF(records, includeImages: false)
+        writePDF(records, includeImages: false, named: "Quby codes.pdf")
     }
 
     /// PDF table with a QR thumbnail per row.
     func writePDFWithImages(_ records: [CodeRecord]) -> URL? {
-        writePDF(records, includeImages: true)
+        writePDF(records, includeImages: true, named: "Quby codes with images.pdf")
     }
 
-    private func writePDF(_ records: [CodeRecord], includeImages: Bool) -> URL? {
+    private func writePDF(_ records: [CodeRecord], includeImages: Bool, named name: String) -> URL? {
         guard !records.isEmpty else { return nil }
         let images: [CGImage?] = includeImages
-            ? records.map { cgImage(fromPNGData: pngData(for: $0)) }
-            : Array(repeating: nil, count: records.count)
+            ? records.map { exportImage(for: $0) }
+            : []
 
         do {
-            let data = try PDFTableBuilder(records: records, images: images, parser: parser).build()
-            let url = FileManager.default.temporaryDirectory.appendingPathComponent("Quby codes.pdf")
-            try data.write(to: url, options: .atomic)
-            return url
+            let data = try PDFTableBuilder(
+                records: records,
+                images: images,
+                includeImages: includeImages,
+                parser: parser
+            ).build()
+            return write(data: data, named: name)
         } catch {
             return nil
         }
-    }
-
-    private func cgImage(fromPNGData data: Data?) -> CGImage? {
-        guard let data else { return nil }
-        return cgImage(from: data)
     }
 
     private struct RowFields {
@@ -190,23 +184,43 @@ struct HistoryExporter {
         )
     }
 
-    private func pngData(for record: CodeRecord) -> Data? {
+    /// Prefer stored bitmaps; otherwise regenerate a QR with Core Image (Apple frameworks only).
+    private func exportImage(for record: CodeRecord) -> CGImage? {
         if let data = record.styledImageData ?? record.baseImageData,
-           let image = cgImage(from: data),
-           let png = generator.pngData(from: image) {
-            return png
+           let image = cgImage(from: data) {
+            return image
+        }
+        return generator.makeImage(from: record.value, minimumSize: 512)
+    }
+
+    private func pngData(for record: CodeRecord) -> Data? {
+        if let data = record.styledImageData ?? record.baseImageData {
+            if isPNG(data) {
+                return data
+            }
+            if let image = cgImage(from: data),
+               let png = generator.pngData(from: image) {
+                return png
+            }
         }
 
-        guard let image = generator.makeImage(from: record.value),
+        guard let image = generator.makeImage(from: record.value, minimumSize: 512),
               let png = generator.pngData(from: image) else {
             return nil
         }
         return png
     }
 
+    private func isPNG(_ data: Data) -> Bool {
+        // PNG signature (ISO/IEC 15948) — avoid re-encoding when already PNG.
+        data.count >= 8 && data.starts(with: [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
+    }
+
     private func cgImage(from data: Data) -> CGImage? {
         guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
-        return CGImageSourceCreateImageAtIndex(source, 0, nil)
+        return CGImageSourceCreateImageAtIndex(source, 0, [
+            kCGImageSourceShouldCache: true
+        ] as CFDictionary)
     }
 
     private func quoted(_ value: String) -> String {
@@ -214,9 +228,22 @@ struct HistoryExporter {
     }
 
     private func write(string: String, named name: String) -> URL? {
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent(name)
+        guard let data = string.data(using: .utf8) else { return nil }
+        return write(data: data, named: name)
+    }
+
+    private func write(data: Data, named name: String) -> URL? {
+        // Unique temp URL so with/without-image variants never overwrite each other
+        // when ShareLink builds both options in the same menu.
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+            .appendingPathComponent(name)
         do {
-            try string.write(to: url, atomically: true, encoding: .utf8)
+            try FileManager.default.createDirectory(
+                at: url.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try data.write(to: url, options: .atomic)
             return url
         } catch {
             return nil
@@ -224,27 +251,25 @@ struct HistoryExporter {
     }
 
     private func writeZip(entries: [(path: String, data: Data)], named name: String) -> URL? {
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent(name)
         do {
-            try ZipStoreArchive.write(entries: entries, to: url)
-            return url
+            let data = try ZipStoreArchive.data(from: entries)
+            return write(data: data, named: name)
         } catch {
             return nil
         }
     }
 }
 
-// MARK: - PDF table
+// MARK: - PDF table (Core Graphics + Core Text — Apple-native PDF creation)
 
 private struct PDFTableBuilder {
 
     let records: [CodeRecord]
     let images: [CGImage?]
+    let includeImages: Bool
     let parser: ScannedContentParser
 
-    private var includesImages: Bool {
-        images.contains { $0 != nil }
-    }
+    private var includesImages: Bool { includeImages }
 
     private let pageSize = CGSize(width: 842, height: 595) // A4 landscape
     private let margin: CGFloat = 28
@@ -645,48 +670,51 @@ private struct ExcelWorkbookBuilder {
 
     private var drawingXML: String {
         var anchors = ""
-        var pictureID = 1
+        var pictureID = 0
         var relationshipIndex = 0
-        // ~72pt square in EMUs (English Metric Units: 914400 = 1 inch).
-        let sizeEMUs = 914400
+        // ~0.9" square in EMUs (914400 EMUs = 1 inch).
+        let sizeEMUs = 822960
 
         for (index, png) in images.enumerated() {
             guard png != nil else { continue }
             relationshipIndex += 1
             pictureID += 1
-            // SpreadsheetDrawing rows are 0-based; row 0 is the header.
+            // SpreadsheetDrawing rows/cols are 0-based; row 0 is the header.
             let row = index + 1
+            let nextRow = row + 1
             anchors += """
-            <xdr:oneCellAnchor>
+            <xdr:twoCellAnchor editAs="oneCell">
               <xdr:from>
                 <xdr:col>7</xdr:col>
                 <xdr:colOff>95250</xdr:colOff>
                 <xdr:row>\(row)</xdr:row>
                 <xdr:rowOff>95250</xdr:rowOff>
               </xdr:from>
-              <xdr:ext cx="\(sizeEMUs)" cy="\(sizeEMUs)"/>
+              <xdr:to>
+                <xdr:col>8</xdr:col>
+                <xdr:colOff>0</xdr:colOff>
+                <xdr:row>\(nextRow)</xdr:row>
+                <xdr:rowOff>0</xdr:rowOff>
+              </xdr:to>
               <xdr:pic>
                 <xdr:nvPicPr>
-                  <xdr:cNvPr id="\(pictureID)" name="QR \(index + 1)" descr="QR code \(index + 1)"/>
-                  <xdr:cNvPicPr>
-                    <a:picLocks noChangeAspect="1"/>
-                  </xdr:cNvPicPr>
+                  <xdr:cNvPr id="\(pictureID)" name="QR \(index + 1)"/>
+                  <xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr>
                 </xdr:nvPicPr>
                 <xdr:blipFill>
                   <a:blip xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:embed="rId\(relationshipIndex)" cstate="print"/>
                   <a:stretch><a:fillRect/></a:stretch>
                 </xdr:blipFill>
-                <xdr:spPr bwMode="auto">
+                <xdr:spPr>
                   <a:xfrm>
                     <a:off x="0" y="0"/>
                     <a:ext cx="\(sizeEMUs)" cy="\(sizeEMUs)"/>
                   </a:xfrm>
                   <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
-                  <a:ln w="9525"><a:noFill/></a:ln>
                 </xdr:spPr>
               </xdr:pic>
               <xdr:clientData/>
-            </xdr:oneCellAnchor>
+            </xdr:twoCellAnchor>
             """
         }
 
