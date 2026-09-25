@@ -421,10 +421,58 @@ struct HistoryView: View {
                 }
             }
 
-            if let file = exporter.writeCSV(selectedRecords) {
-                ShareLink(item: file) {
-                    Label("Export as CSV", systemImage: "tablecells")
+            Menu {
+                if let file = exporter.writeCSVPackage(selectedRecords) {
+                    ShareLink(item: file) {
+                        Label("With images", systemImage: "photo.on.rectangle.angled")
+                    }
                 }
+
+                if let file = exporter.writeCSV(selectedRecords) {
+                    ShareLink(item: file) {
+                        Label("Without images", systemImage: "text.menu")
+                    }
+                }
+            } label: {
+                Label("Export as CSV", systemImage: "text.rectangle")
+            }
+
+            Menu {
+                if let file = exporter.writeExcelWithImages(selectedRecords) {
+                    ShareLink(item: file) {
+                        Label("With embedded images", systemImage: "photo.on.rectangle.angled")
+                    }
+                }
+
+                if let file = exporter.writeExcel(selectedRecords) {
+                    ShareLink(item: file) {
+                        Label("Without images", systemImage: "text.menu")
+                    }
+                }
+            } label: {
+                Label("Export as Excel", systemImage: "tablecells")
+            }
+
+            if let file = exporter.writeJSON(selectedRecords) {
+                ShareLink(item: file) {
+                    Label("Export as JSON", systemImage: "curlybraces")
+                }
+            }
+
+            Menu {
+                if let file = exporter.writePDFWithImages(selectedRecords) {
+                    ShareLink(item: file) {
+                        Label("With images", systemImage: "photo.on.rectangle.angled")
+                    }
+                }
+
+                if let file = exporter.writePDF(selectedRecords) {
+                    ShareLink(item: file) {
+                        Label("Without images", systemImage: "text.menu")
+                    }
+                }
+            } label: {
+                Label("Export as PDF", systemImage: "doc.richtext")
             }
         } label: {
             Label("Share", systemImage: "square.and.arrow.up")
