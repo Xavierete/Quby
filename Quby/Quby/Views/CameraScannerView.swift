@@ -127,13 +127,7 @@ struct CameraScannerView: View {
     private var cameraArea: some View {
         switch viewModel.status {
         case .scanning:
-            if let frame = viewModel.previewFrame {
-                frame
-                    .resizable()
-                    .scaledToFill()
-            } else {
-                placeholder("Starting camera…", icon: "camera")
-            }
+            CameraPreviewView(session: viewModel.captureSession)
 
         case .idle:
             placeholder("Starting camera…", icon: "camera")

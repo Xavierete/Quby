@@ -58,8 +58,6 @@ private enum HistoryTypeFilter: String, CaseIterable, Identifiable {
 
 struct HistoryView: View {
 
-    @Environment(\.modelContext) private var modelContext
-    @Query(sort: \CodeRecord.createdAt, order: .reverse) private var records: [CodeRecord]
     @State private var favoritesFilter: HistoryFavoritesFilter = .all
     @State private var typeFilter: HistoryTypeFilter = .all
     @State private var sortOrder: HistorySortOrder = .newest
@@ -71,24 +69,83 @@ struct HistoryView: View {
     @State private var confirmDelete = false
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
 
+    var body: some View {
+        HistoryViewContent(
+            favoritesOnly: favoritesFilter == .favoritesOnly,
+            newestFirst: sortOrder == .newest,
+            favoritesFilter: $favoritesFilter,
+            typeFilter: $typeFilter,
+            sortOrder: $sortOrder,
+            searchText: $searchText,
+            isEditing: $isEditing,
+            selectedCodeID: $selectedCodeID,
+            bulkSelection: $bulkSelection,
+            toast: $toast,
+            confirmDelete: $confirmDelete,
+            columnVisibility: $columnVisibility
+        )
+    }
+}
+
+/// Owns the SwiftData `@Query` so favorites / sort can use `#Predicate` and store order.
+private struct HistoryViewContent: View {
+
+    @Environment(\.modelContext) private var modelContext
+    @Query private var records: [CodeRecord]
+
+    @Binding var favoritesFilter: HistoryFavoritesFilter
+    @Binding var typeFilter: HistoryTypeFilter
+    @Binding var sortOrder: HistorySortOrder
+    @Binding var searchText: String
+    @Binding var isEditing: Bool
+    @Binding var selectedCodeID: PersistentIdentifier?
+    @Binding var bulkSelection: Set<PersistentIdentifier>
+    @Binding var toast: String?
+    @Binding var confirmDelete: Bool
+    @Binding var columnVisibility: NavigationSplitViewVisibility
+
     private let parser = ScannedContentParser()
     private let safety = LinkSafety()
-    private let exporter = HistoryExporter()
     private let clipboard = Clipboard()
 
-    private var sortedRecords: [CodeRecord] {
-        switch sortOrder {
-        case .newest:
-            return records
-        case .oldest:
-            return records.reversed()
+    init(
+        favoritesOnly: Bool,
+        newestFirst: Bool,
+        favoritesFilter: Binding<HistoryFavoritesFilter>,
+        typeFilter: Binding<HistoryTypeFilter>,
+        sortOrder: Binding<HistorySortOrder>,
+        searchText: Binding<String>,
+        isEditing: Binding<Bool>,
+        selectedCodeID: Binding<PersistentIdentifier?>,
+        bulkSelection: Binding<Set<PersistentIdentifier>>,
+        toast: Binding<String?>,
+        confirmDelete: Binding<Bool>,
+        columnVisibility: Binding<NavigationSplitViewVisibility>
+    ) {
+        let order: SortOrder = newestFirst ? .reverse : .forward
+        if favoritesOnly {
+            _records = Query(
+                filter: #Predicate<CodeRecord> { $0.isFavorite == true },
+                sort: \CodeRecord.createdAt,
+                order: order
+            )
+        } else {
+            _records = Query(sort: \CodeRecord.createdAt, order: order)
         }
+        _favoritesFilter = favoritesFilter
+        _typeFilter = typeFilter
+        _sortOrder = sortOrder
+        _searchText = searchText
+        _isEditing = isEditing
+        _selectedCodeID = selectedCodeID
+        _bulkSelection = bulkSelection
+        _toast = toast
+        _confirmDelete = confirmDelete
+        _columnVisibility = columnVisibility
     }
 
     private var shown: [CodeRecord] {
-        sortedRecords.filter { record in
-            if favoritesFilter == .favoritesOnly && !record.isFavorite { return false }
-
+        records.filter { record in
             if !searchText.isEmpty,
                !record.value.localizedCaseInsensitiveContains(searchText),
                !record.symbology.localizedCaseInsensitiveContains(searchText) {
@@ -364,7 +421,7 @@ struct HistoryView: View {
     }
 
     private var selectButton: some View {
-        Button(isEditing ? "Done" : "Select") {
+        Button {
             // Avoid animating the List selection-type swap — it can trap in AppKit layout.
             if isEditing {
                 isEditing = false
@@ -374,8 +431,18 @@ struct HistoryView: View {
                 bulkSelection.removeAll()
                 selectedCodeID = nil
             }
+        } label: {
+            if isEditing {
+                Image(systemName: "checkmark")
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.white)
+                    .accessibilityLabel("Done")
+            } else {
+                Text("Select")
+            }
         }
         .disabled(shown.isEmpty && !isEditing)
+        .modifier(HistorySelectToolbarStyle(isDone: isEditing))
     }
 
     private var deleteSelectedButton: some View {
@@ -415,61 +482,66 @@ struct HistoryView: View {
                 Label("Share as text", systemImage: "text.alignleft")
             }
 
-            if let file = exporter.writeText(selectedRecords) {
-                ShareLink(item: file) {
-                    Label("Export as text file", systemImage: "doc.text")
-                }
+            ShareLink(
+                item: HistoryTextFileExport(records: selectedRecords),
+                preview: SharePreview("Quby codes.txt")
+            ) {
+                Label("Export as text file", systemImage: "doc.text")
             }
 
             Menu {
-                if let file = exporter.writeCSVPackage(selectedRecords) {
-                    ShareLink(item: file) {
-                        Label("With images", systemImage: "photo.on.rectangle.angled")
-                    }
+                ShareLink(
+                    item: HistoryCSVPackageExport(records: selectedRecords),
+                    preview: SharePreview("Quby codes.zip")
+                ) {
+                    Label("With images", systemImage: "photo.on.rectangle.angled")
                 }
-
-                if let file = exporter.writeCSV(selectedRecords) {
-                    ShareLink(item: file) {
-                        Label("Without images", systemImage: "text.menu")
-                    }
+                ShareLink(
+                    item: HistoryCSVExport(records: selectedRecords),
+                    preview: SharePreview("Quby codes.csv")
+                ) {
+                    Label("Without images", systemImage: "text.menu")
                 }
             } label: {
                 Label("Export as CSV", systemImage: "text.rectangle")
             }
 
             Menu {
-                if let file = exporter.writeExcelWithImages(selectedRecords) {
-                    ShareLink(item: file) {
-                        Label("With embedded images", systemImage: "photo.on.rectangle.angled")
-                    }
+                ShareLink(
+                    item: HistoryExcelExport(records: selectedRecords, withImages: true),
+                    preview: SharePreview("Quby codes with images.xlsx")
+                ) {
+                    Label("With embedded images", systemImage: "photo.on.rectangle.angled")
                 }
-
-                if let file = exporter.writeExcel(selectedRecords) {
-                    ShareLink(item: file) {
-                        Label("Without images", systemImage: "text.menu")
-                    }
+                ShareLink(
+                    item: HistoryExcelExport(records: selectedRecords, withImages: false),
+                    preview: SharePreview("Quby codes.xlsx")
+                ) {
+                    Label("Without images", systemImage: "text.menu")
                 }
             } label: {
                 Label("Export as Excel", systemImage: "tablecells")
             }
 
-            if let file = exporter.writeJSON(selectedRecords) {
-                ShareLink(item: file) {
-                    Label("Export as JSON", systemImage: "curlybraces")
-                }
+            ShareLink(
+                item: HistoryJSONExport(records: selectedRecords),
+                preview: SharePreview("Quby codes.json")
+            ) {
+                Label("Export as JSON", systemImage: "curlybraces")
             }
 
             Menu {
-                if let file = exporter.writePDFWithImages(selectedRecords) {
-                    ShareLink(item: file) {
-                        Label("With images", systemImage: "photo.on.rectangle.angled")
-                    }
+                ShareLink(
+                    item: HistoryPDFExport(records: selectedRecords, withImages: true),
+                    preview: SharePreview("Quby codes with images.pdf")
+                ) {
+                    Label("With images", systemImage: "photo.on.rectangle.angled")
                 }
-
-                if let file = exporter.writePDF(selectedRecords) {
-                    ShareLink(item: file) {
-                        Label("Without images", systemImage: "text.menu")
-                    }
+                ShareLink(
+                    item: HistoryPDFExport(records: selectedRecords, withImages: false),
+                    preview: SharePreview("Quby codes.pdf")
+                ) {
+                    Label("Without images", systemImage: "text.menu")
                 }
             } label: {
                 Label("Export as PDF", systemImage: "doc.richtext")
@@ -579,7 +651,22 @@ struct HistoryView: View {
     }
 
     private var sharedText: String {
-        exporter.plainText(selectedRecords)
+        HistoryExporter().plainText(selectedRecords)
+    }
+}
+
+private struct HistorySelectToolbarStyle: ViewModifier {
+    let isDone: Bool
+
+    func body(content: Content) -> some View {
+        if isDone {
+            content
+                .buttonStyle(.glassProminent)
+                .buttonBorderShape(.circle)
+                .tint(.green)
+        } else {
+            content
+        }
     }
 }
 

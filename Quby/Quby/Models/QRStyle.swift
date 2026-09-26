@@ -1,6 +1,6 @@
 import Foundation
 
-struct CodeColor: Equatable, Hashable {
+nonisolated struct CodeColor: Equatable, Hashable, Sendable {
     var red: Double
     var green: Double
     var blue: Double
@@ -13,7 +13,7 @@ struct CodeColor: Equatable, Hashable {
     }
 }
 
-enum QRModuleStyle: String, CaseIterable, Identifiable {
+nonisolated enum QRModuleStyle: String, CaseIterable, Identifiable, Sendable {
     case square
     case rounded
     case dots
@@ -31,7 +31,7 @@ enum QRModuleStyle: String, CaseIterable, Identifiable {
     }
 }
 
-enum QRCorrection: String, CaseIterable, Identifiable {
+nonisolated enum QRCorrection: String, CaseIterable, Identifiable, Sendable {
     case low = "L"
     case medium = "M"
     case quartile = "Q"
@@ -62,7 +62,7 @@ enum QRCorrection: String, CaseIterable, Identifiable {
     }
 }
 
-struct QRPalette: Identifiable, Equatable, Hashable {
+nonisolated struct QRPalette: Identifiable, Equatable, Hashable, Sendable {
     let id: String
     let name: String
     let foreground: CodeColor
@@ -95,7 +95,7 @@ struct QRPalette: Identifiable, Equatable, Hashable {
     static let all: [QRPalette] = [classic, midnight, ocean, forest, sunset, grape, coffee, mint]
 }
 
-struct QRStyle: Equatable {
+nonisolated struct QRStyle: Equatable, Sendable {
     var palette: QRPalette = .classic
     var module: QRModuleStyle = .square
     var correction: QRCorrection = .medium

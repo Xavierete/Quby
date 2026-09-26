@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import PhotosUI
+import AVFoundation
 
 @Observable
 final class ScannerViewModel {
@@ -13,8 +14,6 @@ final class ScannerViewModel {
     }
 
     private(set) var status: Status = .idle
-    private(set) var previewFrame: Image?
-    private(set) var previewAspect: CGFloat = 9.0 / 16.0
     private(set) var lastScan: CodeRecord?
     private(set) var message: String?
     private(set) var isTorchOn = false
@@ -23,6 +22,11 @@ final class ScannerViewModel {
 
     var isShowingDetails = false
     private(set) var scanCount = 0
+
+    /// HD preset aspect used for tap-to-focus mapping with aspect-fill preview.
+    var previewAspect: CGFloat { 1280.0 / 720.0 }
+
+    var captureSession: AVCaptureSession { scanner.captureSession }
 
     @ObservationIgnored var modelContext: ModelContext?
     @ObservationIgnored private let scanner = CameraScanner()
@@ -35,10 +39,6 @@ final class ScannerViewModel {
         }
         scanner.onContextEnriched = { [weak self] value, fields in
             self?.applyContext(value: value, fields: fields)
-        }
-        scanner.onFrame = { [weak self] cgImage in
-            self?.previewFrame = Image(decorative: cgImage, scale: 1)
-            self?.previewAspect = CGFloat(cgImage.width) / CGFloat(cgImage.height)
         }
     }
 
@@ -73,7 +73,6 @@ final class ScannerViewModel {
 
     func stop() {
         scanner.stop()
-        previewFrame = nil
         isTorchOn = false
         hasTorch = false
         if status == .scanning { status = .idle }
@@ -171,7 +170,6 @@ final class ScannerViewModel {
     private func pauseDetection() {
         scanner.stop()
         isTorchOn = false
-        // Keep the last preview frame while details are open.
         if status == .scanning {
             status = .idle
         }

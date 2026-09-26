@@ -2,26 +2,30 @@ import AVFoundation
 import CoreImage
 
 /// Live camera scanner using AVFoundation metadata output (Apple's recommended
-/// path for custom camera UI). Nearby context is enriched with Vision's
-/// `RecognizeDocumentsRequest` on a captured frame.
+/// path for custom camera UI). Preview is rendered with `AVCaptureVideoPreviewLayer`;
+/// video frames are sampled only for nearby OCR context enrichment.
 final class CameraScanner: NSObject,
                            AVCaptureMetadataOutputObjectsDelegate,
                            AVCaptureVideoDataOutputSampleBufferDelegate,
                            @unchecked Sendable {
 
     var onCodeFound: ((DetectedCode) -> Void)?
-    var onFrame: ((CGImage) -> Void)?
     var onContextEnriched: ((String, [ScanContextField]) -> Void)?
 
+    /// Session for attaching an `AVCaptureVideoPreviewLayer`.
+    var captureSession: AVCaptureSession { session }
+
     private let session = AVCaptureSession()
-    private let context = CIContext(options: [.useSoftwareRenderer: false])
+    /// Used from the serial video output queue (`captureOutput`).
+    nonisolated private let context = CIContext(options: [.useSoftwareRenderer: false])
     private let sessionQueue = DispatchQueue(label: "quby.camera.session")
     private let outputQueue = DispatchQueue(label: "quby.camera.output", qos: .userInitiated)
     private var device: AVCaptureDevice?
     private var metadataOutput: AVCaptureMetadataOutput?
     private var isConfigured = false
     private var latestFrame: CGImage?
-    private var lastPreviewPublishTime = CFAbsoluteTimeGetCurrent()
+    /// Touched only from the serial `outputQueue` in `captureOutput`.
+    nonisolated(unsafe) private var lastFrameSampleTime = CFAbsoluteTimeGetCurrent()
     private let contextExtractor = NearbyScanContextExtractor()
     private var enrichingValue: String?
 
@@ -250,17 +254,17 @@ final class CameraScanner: NSObject,
     nonisolated func captureOutput(_ output: AVCaptureOutput,
                                    didOutput sampleBuffer: CMSampleBuffer,
                                    from connection: AVCaptureConnection) {
-        guard let buffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+        // Sample sparingly on the serial output queue — UI preview uses PreviewLayer.
+        let now = CFAbsoluteTimeGetCurrent()
+        guard now - lastFrameSampleTime >= (1.0 / 4.0) else { return }
+        lastFrameSampleTime = now
 
+        guard let buffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
         let ciImage = CIImage(cvImageBuffer: buffer)
         guard let cgImage = context.createCGImage(ciImage, from: ciImage.extent) else { return }
 
         DispatchQueue.main.async {
             self.latestFrame = cgImage
-            let now = CFAbsoluteTimeGetCurrent()
-            guard now - self.lastPreviewPublishTime >= (1.0 / 15.0) else { return }
-            self.lastPreviewPublishTime = now
-            self.onFrame?(cgImage)
         }
     }
 }

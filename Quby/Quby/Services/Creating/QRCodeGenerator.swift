@@ -5,7 +5,8 @@ import CoreImage.CIFilterBuiltins
 import ImageIO
 import UniformTypeIdentifiers
 
-struct QRCodeGenerator {
+/// Opt out of default MainActor isolation so QR rendering can run off the UI thread.
+nonisolated struct QRCodeGenerator: @unchecked Sendable {
 
     private let context = CIContext()
 

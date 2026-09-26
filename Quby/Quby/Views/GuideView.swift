@@ -14,6 +14,10 @@ struct GuideView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var currentStep = 0
 
+    /// When true, finishing (Get started / Done) marks the guide as seen.
+    var markSeenOnFinish: Bool = false
+    var onFinish: (() -> Void)? = nil
+
     private let slides: [GuideSlide] = [
         GuideSlide(
             id: 0,
@@ -72,7 +76,7 @@ struct GuideView: View {
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") {
-                        dismiss()
+                        finish()
                     }
                 }
             }
@@ -138,7 +142,7 @@ struct GuideView: View {
                         currentStep += 1
                     }
                 } else {
-                    dismiss()
+                    finish()
                 }
             } label: {
                 Text(footerButtonTitle)
@@ -153,6 +157,13 @@ struct GuideView: View {
         .padding(.horizontal, 24)
         .padding(.top, 8)
         .padding(.bottom, 8)
+    }
+
+    private func finish() {
+        if markSeenOnFinish {
+            onFinish?()
+        }
+        dismiss()
     }
 }
 

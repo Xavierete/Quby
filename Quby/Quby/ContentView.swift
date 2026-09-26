@@ -26,11 +26,12 @@ struct ContentView: View {
         .task {
             if !hasSeenGuide {
                 showGuide = true
-                hasSeenGuide = true
             }
         }
         .sheet(isPresented: $showGuide) {
-            GuideView()
+            GuideView(markSeenOnFinish: !hasSeenGuide) {
+                hasSeenGuide = true
+            }
                 #if os(iOS)
                 .presentationDragIndicator(.visible)
                 #endif

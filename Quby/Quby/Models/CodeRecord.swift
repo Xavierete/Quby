@@ -15,9 +15,9 @@ final class CodeRecord {
     var isFavorite: Bool = false
     var symbology: String = "QR code"
     /// Classic / unscanned look.
-    var baseImageData: Data?
+    @Attribute(.externalStorage) var baseImageData: Data?
     /// Styled look from Create (palette, shape, logo).
-    var styledImageData: Data?
+    @Attribute(.externalStorage) var styledImageData: Data?
     /// Nearby OCR from the photo/camera frame (name, place, sign text).
     var nearbyContextJSON: String = "[]"
 

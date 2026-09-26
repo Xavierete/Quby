@@ -51,6 +51,7 @@ final class GeneratorViewModel {
     /// Latest created record for the current QR preview.
     private(set) var lastRecord: CodeRecord?
     private(set) var isSavedToPhotos = false
+    private(set) var isGenerating = false
 
     /// Set when Create should open details after the creation sheet dismisses.
     var pendingDetailRecord: CodeRecord?
@@ -58,13 +59,14 @@ final class GeneratorViewModel {
     var pendingWebsiteURL: URL?
 
     @ObservationIgnored var modelContext: ModelContext?
-    @ObservationIgnored private let generator = QRCodeGenerator()
     @ObservationIgnored private let builder = QRPayloadBuilder()
     @ObservationIgnored private let persistence = CodeScanPersistence()
     @ObservationIgnored private var styledCGImage: CGImage?
     @ObservationIgnored private var baseCGImage: CGImage?
     @ObservationIgnored private var logo: CGImage?
     @ObservationIgnored private var saveResetTask: Task<Void, Never>?
+    @ObservationIgnored private var generateTask: Task<Void, Never>?
+    @ObservationIgnored private var generateSerial = 0
 
     var canGenerate: Bool {
         builder.payload(for: type, input: input) != nil
@@ -120,6 +122,7 @@ final class GeneratorViewModel {
     }
 
     func generate(queueDetailsIfEnabled: Bool = false) {
+        generateTask?.cancel()
         saveResetTask?.cancel()
         saveResetTask = nil
         message = nil
@@ -131,59 +134,103 @@ final class GeneratorViewModel {
             return
         }
 
+        let styleSnapshot = style
+        let logoBox = UncheckedLogo(image: logo)
+        let showsBoth = hasLogo || styleSnapshot != QRStyle()
+        let queueDetails = queueDetailsIfEnabled
+        let keepBasePageWhileRestyling = !queueDetailsIfEnabled && selectedPreviewPage == .base
         let baseStyle = QRStyle()
-        guard let base = generator.makeImage(from: payload, style: baseStyle, logo: nil),
-              let styled = generator.makeImage(from: payload, style: style, logo: logo) else {
-            clearResult()
-            message = "Fill in the fields above first."
-            return
-        }
+        generateSerial += 1
+        let serial = generateSerial
+        isGenerating = true
 
-        baseCGImage = base
-        styledCGImage = styled
-        baseImage = Image(decorative: base, scale: 1)
-        styledImage = Image(decorative: styled, scale: 1)
+        generateTask = Task(priority: .userInitiated) {
+            let rendered = await Task.detached(priority: .userInitiated) { () -> RenderedQR? in
+                let generator = QRCodeGenerator()
+                let logoSnapshot = logoBox.image
+                guard let base = generator.makeImage(from: payload, style: baseStyle, logo: nil),
+                      let styled = generator.makeImage(from: payload, style: styleSnapshot, logo: logoSnapshot) else {
+                    return nil
+                }
 
-        basePNGURL = generator.writePNG(base, named: "QRCode-Base")
-        styledPNGURL = generator.writePNG(styled, named: "QRCode-Styled")
-        basePDFURL = generator.writePDF(from: payload, style: baseStyle, logo: nil, named: "QRCode-Base")
-        styledPDFURL = generator.writePDF(from: payload, style: style, logo: logo, named: "QRCode-Styled")
-        baseSVGURL = generator.writeSVG(from: payload, style: baseStyle, logo: nil, named: "QRCode-Base")
-        styledSVGURL = generator.writeSVG(from: payload, style: style, logo: logo, named: "QRCode-Styled")
+                return RenderedQR(
+                    base: base,
+                    styled: styled,
+                    basePNGURL: generator.writePNG(base, named: "QRCode-Base"),
+                    styledPNGURL: generator.writePNG(styled, named: "QRCode-Styled"),
+                    basePDFURL: generator.writePDF(from: payload, style: baseStyle, logo: nil, named: "QRCode-Base"),
+                    styledPDFURL: generator.writePDF(from: payload, style: styleSnapshot, logo: logoSnapshot, named: "QRCode-Styled"),
+                    baseSVGURL: generator.writeSVG(from: payload, style: baseStyle, logo: nil, named: "QRCode-Base"),
+                    styledSVGURL: generator.writeSVG(from: payload, style: styleSnapshot, logo: logoSnapshot, named: "QRCode-Styled"),
+                    basePNGData: generator.pngData(from: base),
+                    styledPNGData: showsBoth ? generator.pngData(from: styled) : nil
+                )
+            }.value
 
-        if !showsBothPreviews {
-            selectedPreviewPage = .base
-        } else if selectedPreviewPage == .base && !queueDetailsIfEnabled {
-            // Keep page while restyling.
-        } else if queueDetailsIfEnabled {
-            selectedPreviewPage = .styled
-        }
+            guard !Task.isCancelled else { return }
 
-        // Only Create inserts history (always a new row, even if the value already exists).
-        // Style redraws must not spam History.
-        if queueDetailsIfEnabled {
-            let record = saveToHistory(
-                payload,
-                baseImage: base,
-                styledImage: showsBothPreviews ? styled : nil
-            )
-            lastRecord = record
+            await MainActor.run {
+                guard serial == self.generateSerial else { return }
+                self.isGenerating = false
 
-            if let url = persistence.websiteToOpenAutomatically(payload) {
-                pendingWebsiteURL = url
-                return
-            }
+                guard let rendered else {
+                    self.clearResult()
+                    self.message = "Fill in the fields above first."
+                    return
+                }
 
-            if SettingsKey.isOn(SettingsKey.showDetailsAutomatically) {
-                pendingDetailRecord = record
+                self.baseCGImage = rendered.base
+                self.styledCGImage = rendered.styled
+                self.baseImage = Image(decorative: rendered.base, scale: 1)
+                self.styledImage = Image(decorative: rendered.styled, scale: 1)
+                self.basePNGURL = rendered.basePNGURL
+                self.styledPNGURL = rendered.styledPNGURL
+                self.basePDFURL = rendered.basePDFURL
+                self.styledPDFURL = rendered.styledPDFURL
+                self.baseSVGURL = rendered.baseSVGURL
+                self.styledSVGURL = rendered.styledSVGURL
+
+                if !showsBoth {
+                    self.selectedPreviewPage = .base
+                } else if keepBasePageWhileRestyling {
+                    // Keep page while restyling.
+                } else if queueDetails {
+                    self.selectedPreviewPage = .styled
+                }
+
+                if queueDetails {
+                    let record = self.saveToHistory(
+                        payload,
+                        baseImageData: rendered.basePNGData,
+                        styledImageData: rendered.styledPNGData
+                    )
+                    self.lastRecord = record
+
+                    if let url = self.persistence.websiteToOpenAutomatically(payload) {
+                        self.pendingWebsiteURL = url
+                        return
+                    }
+
+                    if SettingsKey.isOn(SettingsKey.showDetailsAutomatically) {
+                        self.pendingDetailRecord = record
+                    }
+                }
             }
         }
     }
 
+    /// Waits until the in-flight generate task finishes (used by Create before dismiss).
+    func generateAndWait(queueDetailsIfEnabled: Bool = false) async {
+        generate(queueDetailsIfEnabled: queueDetailsIfEnabled)
+        await generateTask?.value
+    }
+
     func saveToPhotos() async {
-        guard let cgImage = activeCGImage,
-              let data = generator.pngData(from: cgImage) else { return }
+        guard let cgImage = activeCGImage else { return }
         guard !isSavedToPhotos else { return }
+
+        let data = QRCodeGenerator().pngData(from: cgImage)
+        guard let data else { return }
 
         let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
         guard status == .authorized || status == .limited else {
@@ -236,11 +283,15 @@ final class GeneratorViewModel {
     }
 
     private func redrawIfNeeded() {
-        guard baseImage != nil || styledImage != nil else { return }
+        guard baseImage != nil || styledImage != nil || isGenerating else { return }
         generate()
     }
 
     private func clearResult() {
+        generateTask?.cancel()
+        generateTask = nil
+        generateSerial += 1
+        isGenerating = false
         saveResetTask?.cancel()
         saveResetTask = nil
         styledImage = nil
@@ -263,13 +314,13 @@ final class GeneratorViewModel {
 
     @discardableResult
     private func saveToHistory(_ value: String,
-                               baseImage: CGImage,
-                               styledImage: CGImage?) -> CodeRecord {
+                               baseImageData: Data?,
+                               styledImageData: Data?) -> CodeRecord {
         let record = CodeRecord(
             value: value,
             kind: .created,
-            baseImageData: generator.pngData(from: baseImage),
-            styledImageData: styledImage.flatMap { generator.pngData(from: $0) }
+            baseImageData: baseImageData,
+            styledImageData: styledImageData
         )
         if SettingsKey.isOn(SettingsKey.saveHistory) {
             modelContext?.insert(record)
@@ -281,4 +332,21 @@ final class GeneratorViewModel {
         guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
         return CGImageSourceCreateImageAtIndex(source, 0, nil)
     }
+}
+
+private struct UncheckedLogo: @unchecked Sendable {
+    let image: CGImage?
+}
+
+private struct RenderedQR: @unchecked Sendable {
+    let base: CGImage
+    let styled: CGImage
+    let basePNGURL: URL?
+    let styledPNGURL: URL?
+    let basePDFURL: URL?
+    let styledPDFURL: URL?
+    let baseSVGURL: URL?
+    let styledSVGURL: URL?
+    let basePNGData: Data?
+    let styledPNGData: Data?
 }

@@ -76,13 +76,15 @@ struct QRCreationSheet: View {
     private var createButton: some View {
         Button {
             focusedField = nil
-            viewModel.generate(queueDetailsIfEnabled: true)
-            dismiss()
+            Task {
+                await viewModel.generateAndWait(queueDetailsIfEnabled: true)
+                dismiss()
+            }
         } label: {
             #if os(macOS)
-            Text("Create QR code")
+            Text(viewModel.isGenerating ? "Creating…" : "Create QR code")
             #else
-            Text("Create QR code")
+            Text(viewModel.isGenerating ? "Creating…" : "Create QR code")
                 .font(.body.weight(.bold))
                 .foregroundStyle(Color.white)
                 .frame(maxWidth: .infinity)
@@ -97,7 +99,7 @@ struct QRCreationSheet: View {
         .tint(viewModel.canGenerate ? .green : .gray)
         .foregroundStyle(Color.white)
         #endif
-        .disabled(!viewModel.canGenerate)
+        .disabled(!viewModel.canGenerate || viewModel.isGenerating)
     }
 
     @ViewBuilder
