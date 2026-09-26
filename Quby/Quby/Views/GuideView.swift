@@ -23,33 +23,41 @@ struct GuideView: View {
             id: 0,
             icon: "qrcode.viewfinder",
             color: .blue,
-            title: "Instant Scanning",
-            detail: "Read QR codes and all standard barcodes in real time with the camera, or decode images from your Photos library.",
+            title: "Scan in a snap",
+            detail: "Point the camera at any QR or barcode, or pick a photo from your library. Quby reads it instantly and saves it to History when you want.",
             badge: "Camera & Photos"
         ),
         GuideSlide(
             id: 1,
             icon: "paintbrush",
             color: .purple,
-            title: "Create & Style",
-            detail: "Build codes for websites, contacts, Wi-Fi networks, and locations. Customise shapes, colour palettes, and center logos.",
+            title: "Create & style",
+            detail: "Make codes for websites, Wi‑Fi, contacts, email, SMS, locations, and plain text. Tune shapes, palettes, and a center logo, then share as PNG, PDF, or SVG.",
             badge: "PNG, PDF & SVG"
         ),
         GuideSlide(
             id: 2,
-            icon: "shield.lefthalf.filled",
-            color: .orange,
-            title: "Link Safety",
-            detail: "Inspect destinations before opening. Quby alerts you to lookalike domains, unencrypted links, and hidden addresses.",
-            badge: "Phishing Protection"
+            icon: "sparkles",
+            color: .mint,
+            title: "Smart organization",
+            detail: "On devices with Apple Intelligence, History can group your codes into clear sections with short titles—Travel, Home Wi‑Fi, Contacts, and more. Reorganize anytime from the Filter menu.",
+            badge: "Apple Intelligence"
         ),
         GuideSlide(
             id: 3,
+            icon: "shield.lefthalf.filled",
+            color: .orange,
+            title: "Safer links",
+            detail: "Before you open a website, Quby flags lookalike domains, unencrypted http links, and other risky patterns so you can decide with context.",
+            badge: "Link Safety"
+        ),
+        GuideSlide(
+            id: 4,
             icon: "lock.shield",
             color: .green,
-            title: "Private & On-Device",
-            detail: "Your history and generated codes stay entirely on this device. Search, filter, or export your data to CSV anytime.",
-            badge: "Offline Storage"
+            title: "Private on this device",
+            detail: "Scans and creations stay on your device. Search, filter, favorite, and export History as text, CSV, Excel, JSON, or PDF—with or without QR images.",
+            badge: "On-Device"
         )
     ]
 

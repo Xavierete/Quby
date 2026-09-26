@@ -112,6 +112,7 @@ private struct HistoryViewContent: View {
     @State private var exportTask: Task<Void, Never>?
     @State private var isOrganizing = false
     @State private var organizeTask: Task<Void, Never>?
+    @State private var smartLayoutEpoch = 0
 
     private let parser = ScannedContentParser()
     private let safety = LinkSafety()
@@ -364,10 +365,11 @@ private struct HistoryViewContent: View {
             }
             .id("history-mac")
             .selectionDisabled(isEditing)
-            .animation(.snappy, value: isEditing)
-            .animation(.snappy, value: bulkSelection)
+            // Don't animate the whole list on Select — only the leading circles move.
+            .animation(nil, value: isEditing)
+            .animation(nil, value: bulkSelection)
             .animation(.snappy, value: isExporting)
-            .animation(.snappy, value: hasSmartOrganization)
+            .animation(.smooth(duration: 0.55), value: smartLayoutEpoch)
             .scrollExportProgressIntoView(proxy: proxy, isExporting: isExporting)
         }
     }
@@ -383,7 +385,7 @@ private struct HistoryViewContent: View {
                 }
                 .id("history-bulk")
                 .animation(.snappy, value: isExporting)
-                .animation(.snappy, value: hasSmartOrganization)
+                .animation(.smooth(duration: 0.55), value: smartLayoutEpoch)
                 .scrollExportProgressIntoView(proxy: proxy, isExporting: isExporting)
             } else {
                 List(selection: $selectedCodeID) {
@@ -392,7 +394,7 @@ private struct HistoryViewContent: View {
                 }
                 .id("history-single")
                 .animation(.snappy, value: isExporting)
-                .animation(.snappy, value: hasSmartOrganization)
+                .animation(.smooth(duration: 0.55), value: smartLayoutEpoch)
                 .scrollExportProgressIntoView(proxy: proxy, isExporting: isExporting)
             }
         }
@@ -430,24 +432,18 @@ private struct HistoryViewContent: View {
         preferContextMenuOnly: Bool,
         macBulkSelect: Bool
     ) -> some View {
-        Group {
-            if macBulkSelect && isEditing {
-                row(for: record)
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        toggleBulkSelection(record.persistentModelID)
-                    }
-            } else {
-                row(for: record)
-                    .tag(record.persistentModelID)
-            }
-        }
-        .historyRowActions(
-            favorite: { record.isFavorite.toggle() },
-            isFavorite: record.isFavorite,
-            delete: { delete(record) },
-            preferContextMenuOnly: preferContextMenuOnly
-        )
+        row(for: record)
+            .tag(record.persistentModelID)
+            .modifier(HistoryMacBulkSelectModifier(
+                isEnabled: macBulkSelect && isEditing,
+                action: { toggleBulkSelection(record.persistentModelID) }
+            ))
+            .historyRowActions(
+                favorite: { record.isFavorite.toggle() },
+                isFavorite: record.isFavorite,
+                delete: { delete(record) },
+                preferContextMenuOnly: preferContextMenuOnly
+            )
     }
 
     @ViewBuilder
@@ -540,8 +536,9 @@ private struct HistoryViewContent: View {
         let isBulkSelected = bulkSelection.contains(record.persistentModelID)
 
         return HStack(spacing: 12) {
-            if runsOnMac && isEditing {
-                // Match iOS EditMode: blue filled circle + white check (readable on any row tint).
+            if runsOnMac {
+                // Keep the circle in the hierarchy so Select only slides this control,
+                // instead of remounting every row.
                 Image(systemName: isBulkSelected ? "checkmark.circle.fill" : "circle")
                     .font(.title2)
                     .fontWeight(.regular)
@@ -552,11 +549,14 @@ private struct HistoryViewContent: View {
                     )
                     .contentTransition(.symbolEffect(.replace))
                     .frame(width: 24, height: 24)
+                    .opacity(isEditing ? 1 : 0)
+                    .scaleEffect(isEditing ? 1 : 0.82)
+                    .frame(width: isEditing ? 24 : 0, alignment: .leading)
+                    .clipped()
                     .accessibilityLabel(isBulkSelected ? "Selected" : "Not selected")
-                    .transition(.asymmetric(
-                        insertion: .move(edge: .leading).combined(with: .opacity),
-                        removal: .move(edge: .leading).combined(with: .opacity)
-                    ))
+                    .accessibilityHidden(!isEditing)
+                    .animation(.snappy(duration: 0.28), value: isEditing)
+                    .animation(.snappy(duration: 0.22), value: isBulkSelected)
             }
 
             Image(systemName: content.icon)
@@ -597,13 +597,10 @@ private struct HistoryViewContent: View {
                 }
             }
         }
-        .padding(.leading, runsOnMac && isEditing ? 2 : 0)
-        .animation(.snappy, value: isEditing)
-        .animation(.snappy, value: isBulkSelected)
     }
 
     private func toggleBulkSelection(_ id: PersistentIdentifier) {
-        withAnimation(.snappy) {
+        withAnimation(.snappy(duration: 0.22)) {
             if bulkSelection.contains(id) {
                 bulkSelection.remove(id)
             } else {
@@ -629,15 +626,17 @@ private struct HistoryViewContent: View {
 
     private var selectButton: some View {
         Button {
-            withAnimation(.snappy) {
-                if isEditing {
-                    isEditing = false
-                    bulkSelection.removeAll()
-                } else {
-                    isEditing = true
-                    bulkSelection.removeAll()
+            // Animate only the Select circles; clear selection without list churn.
+            var clear = Transaction()
+            clear.disablesAnimations = true
+            withTransaction(clear) {
+                bulkSelection.removeAll()
+                if !isEditing {
                     selectedCodeID = nil
                 }
+            }
+            withAnimation(.snappy(duration: 0.28)) {
+                isEditing.toggle()
             }
         } label: {
             if isEditing {
@@ -651,7 +650,7 @@ private struct HistoryViewContent: View {
         }
         .disabled(shown.isEmpty && !isEditing)
         .modifier(HistorySelectToolbarStyle(isDone: isEditing))
-        .animation(.snappy, value: isEditing)
+        .animation(.snappy(duration: 0.28), value: isEditing)
     }
 
     private var deleteSelectedButton: some View {
@@ -913,23 +912,24 @@ private struct HistoryViewContent: View {
                     organization.assignments.map { ($0.id, $0) },
                     uniquingKeysWith: { _, latest in latest }
                 )
-                for (index, record) in allRecords.enumerated() {
-                    let id = index + 1
-                    if let assignment = byID[id] {
-                        record.smartGroupTitle = assignment.groupTitle
-                        record.smartTitle = assignment.smartTitle
-                        record.smartSortIndex = index
-                    } else {
-                        record.smartGroupTitle = "Other"
-                        record.smartTitle = String(record.value.prefix(40))
-                        record.smartSortIndex = index
+                withAnimation(.smooth(duration: 0.55)) {
+                    for (index, record) in allRecords.enumerated() {
+                        let id = index + 1
+                        if let assignment = byID[id] {
+                            record.smartGroupTitle = assignment.groupTitle
+                            record.smartTitle = assignment.smartTitle
+                            record.smartSortIndex = index
+                        } else {
+                            record.smartGroupTitle = "Other"
+                            record.smartTitle = String(record.value.prefix(40))
+                            record.smartSortIndex = index
+                        }
                     }
+                    smartLayoutEpoch += 1
+                    isOrganizing = false
                 }
 
                 try? modelContext.save()
-                withAnimation(.snappy) {
-                    isOrganizing = false
-                }
                 let groupCount = Set(organization.assignments.map(\.groupTitle)).count
                 show(groupCount == 1
                      ? "Organized into 1 group"
@@ -943,12 +943,13 @@ private struct HistoryViewContent: View {
 
     private func clearSmartOrganization() {
         organizeTask?.cancel()
-        withAnimation(.snappy) {
+        withAnimation(.smooth(duration: 0.45)) {
             for record in records {
                 record.smartGroupTitle = ""
                 record.smartTitle = ""
                 record.smartSortIndex = 0
             }
+            smartLayoutEpoch += 1
             isOrganizing = false
         }
         try? modelContext.save()
@@ -1045,6 +1046,23 @@ private struct HistorySmartSection: Identifiable {
     let id: String
     let title: String
     let records: [CodeRecord]
+}
+
+/// Enables bulk tap only while Select is active, without remounting the row body.
+private struct HistoryMacBulkSelectModifier: ViewModifier {
+    let isEnabled: Bool
+    let action: () -> Void
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if isEnabled {
+            content
+                .contentShape(Rectangle())
+                .onTapGesture(perform: action)
+        } else {
+            content
+        }
+    }
 }
 
 private struct PreparedHistoryExport: Identifiable {

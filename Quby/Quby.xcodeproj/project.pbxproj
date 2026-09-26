@@ -6,7 +6,12 @@
 	objectVersion = 110;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		5744A48030684FC300234BD1 /* Launch Screen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 5744A47F30684FC300234BD1 /* Launch Screen.storyboard */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
+		5744A47F30684FC300234BD1 /* Launch Screen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = "Launch Screen.storyboard"; sourceTree = "<group>"; };
 		579C25E9305FE80200AE3025 /* Quby.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Quby.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -43,6 +48,7 @@
 		579C25E0305FE80200AE3025 = {
 			isa = PBXGroup;
 			children = (
+				5744A47F30684FC300234BD1 /* Launch Screen.storyboard */,
 				579C25EB305FE80200AE3025 /* Quby */,
 				579C25EA305FE80200AE3025 /* Products */,
 			);
@@ -115,6 +121,7 @@
 		579C25E7305FE80200AE3025 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			files = (
+				5744A48030684FC300234BD1 /* Launch Screen.storyboard in Resources */,
 			);
 		};
 /* End PBXResourcesBuildPhase section */
@@ -275,7 +282,7 @@
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Quby needs access to photos to scan a QR.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UILaunchStoryboardName = "Launch Screen";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
@@ -327,7 +334,7 @@
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Quby needs access to photos to scan a QR.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UILaunchStoryboardName = "Launch Screen";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
