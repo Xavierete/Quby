@@ -288,19 +288,39 @@ private struct HistoryViewContent: View {
     @ViewBuilder
     private var historyList: some View {
         if isEditing {
-            List(selection: $bulkSelection) {
-                ForEach(shown, id: \.persistentModelID) { record in
-                    row(for: record)
-                        .tag(record.persistentModelID)
-                        .historyRowActions(
-                            favorite: { record.isFavorite.toggle() },
-                            isFavorite: record.isFavorite,
-                            delete: { delete(record) },
-                            preferContextMenuOnly: runsOnMac
-                        )
+            if runsOnMac {
+                // macOS has no EditMode checkboxes — custom circles + click-to-toggle.
+                List {
+                    ForEach(shown, id: \.persistentModelID) { record in
+                        row(for: record)
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                toggleBulkSelection(record.persistentModelID)
+                            }
+                            .historyRowActions(
+                                favorite: { record.isFavorite.toggle() },
+                                isFavorite: record.isFavorite,
+                                delete: { delete(record) },
+                                preferContextMenuOnly: true
+                            )
+                    }
                 }
+                .id("history-bulk-mac")
+            } else {
+                List(selection: $bulkSelection) {
+                    ForEach(shown, id: \.persistentModelID) { record in
+                        row(for: record)
+                            .tag(record.persistentModelID)
+                            .historyRowActions(
+                                favorite: { record.isFavorite.toggle() },
+                                isFavorite: record.isFavorite,
+                                delete: { delete(record) },
+                                preferContextMenuOnly: false
+                            )
+                    }
+                }
+                .id("history-bulk")
             }
-            .id("history-bulk")
         } else {
             List(selection: $selectedCodeID) {
                 ForEach(shown, id: \.persistentModelID) { record in
@@ -324,7 +344,9 @@ private struct HistoryViewContent: View {
             ContentUnavailableView(
                 "Selecting codes",
                 systemImage: "checkmark.circle",
-                description: Text("Choose codes in the list, then copy, share or delete.")
+                description: Text(runsOnMac
+                                  ? "Click the circles in the list, then copy, share or delete."
+                                  : "Choose codes in the list, then copy, share or delete.")
             )
             .navigationTitle("History")
             .toolbarTitleDisplayMode(.inline)
@@ -370,8 +392,17 @@ private struct HistoryViewContent: View {
             guard case .website(let url) = content else { return false }
             return !safety.warnings(for: url).isEmpty
         }()
+        let isBulkSelected = bulkSelection.contains(record.persistentModelID)
 
         return HStack(spacing: 12) {
+            if runsOnMac && isEditing {
+                Image(systemName: isBulkSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.title3)
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(isBulkSelected ? Color.accentColor : Color.secondary)
+                    .accessibilityLabel(isBulkSelected ? "Selected" : "Not selected")
+            }
+
             Image(systemName: content.icon)
                 .foregroundStyle(.secondary)
                 .frame(width: 22)
@@ -402,6 +433,14 @@ private struct HistoryViewContent: View {
                         .accessibilityLabel("Favorite")
                 }
             }
+        }
+    }
+
+    private func toggleBulkSelection(_ id: PersistentIdentifier) {
+        if bulkSelection.contains(id) {
+            bulkSelection.remove(id)
+        } else {
+            bulkSelection.insert(id)
         }
     }
 
