@@ -66,21 +66,37 @@ struct HistoryExporter {
         return ([header] + rows).joined(separator: "\n") + "\n"
     }
 
-    func writeText(_ records: [CodeRecord]) -> URL? {
-        write(string: plainText(records), named: "Quby codes.txt")
+    func writeText(
+        _ records: [CodeRecord],
+        progress: (@MainActor (Double) -> Void)? = nil
+    ) async -> URL? {
+        await report(progress, 0.2)
+        let url = write(string: plainText(records), named: "Quby codes.txt")
+        await report(progress, 1)
+        return url
     }
 
     /// CSV only (no image files).
-    func writeCSV(_ records: [CodeRecord]) -> URL? {
-        write(string: csv(records), named: "Quby codes.csv")
+    func writeCSV(
+        _ records: [CodeRecord],
+        progress: (@MainActor (Double) -> Void)? = nil
+    ) async -> URL? {
+        await report(progress, 0.2)
+        let url = write(string: csv(records), named: "Quby codes.csv")
+        await report(progress, 1)
+        return url
     }
 
     /// ZIP with `codes.csv` plus `images/001.png`… for each code.
-    func writeCSVPackage(_ records: [CodeRecord]) -> URL? {
+    func writeCSVPackage(
+        _ records: [CodeRecord],
+        progress: (@MainActor (Double) -> Void)? = nil
+    ) async -> URL? {
         guard !records.isEmpty else { return nil }
 
         var entries: [(path: String, data: Data)] = []
         var imageNames: [String?] = []
+        let total = Double(records.count)
 
         for (index, record) in records.enumerated() {
             let id = String(format: "%03d", index + 1)
@@ -91,80 +107,142 @@ struct HistoryExporter {
             } else {
                 imageNames.append(nil)
             }
+            await report(progress, Double(index + 1) / total * 0.85)
         }
 
         guard let csvData = csv(records, imageNames: imageNames).data(using: .utf8) else { return nil }
         entries.insert(("codes.csv", csvData), at: 0)
 
-        return writeZip(entries: entries, named: "Quby codes.zip")
+        await report(progress, 0.92)
+        let url = writeZip(entries: entries, named: "Quby codes.zip")
+        await report(progress, 1)
+        return url
     }
 
-    func writeJSON(_ records: [CodeRecord]) -> URL? {
-        write(string: json(records), named: "Quby codes.json")
+    func writeJSON(
+        _ records: [CodeRecord],
+        progress: (@MainActor (Double) -> Void)? = nil
+    ) async -> URL? {
+        await report(progress, 0.2)
+        let url = write(string: json(records), named: "Quby codes.json")
+        await report(progress, 1)
+        return url
     }
 
     /// Excel workbook (.xlsx) without embedded images.
-    func writeExcel(_ records: [CodeRecord]) -> URL? {
+    func writeExcel(
+        _ records: [CodeRecord],
+        progress: (@MainActor (Double) -> Void)? = nil
+    ) async -> URL? {
         guard !records.isEmpty else { return nil }
+        await report(progress, 0.15)
         do {
+            await report(progress, 0.55)
             let data = try ExcelWorkbookBuilder(
                 records: records,
                 images: [],
                 includeImages: false,
                 parser: parser
             ).build()
-            return write(data: data, named: "Quby codes.xlsx")
+            await report(progress, 0.9)
+            let url = write(data: data, named: "Quby codes.xlsx")
+            await report(progress, 1)
+            return url
         } catch {
             return nil
         }
     }
 
     /// Excel workbook (.xlsx) with a QR image on each selected row.
-    func writeExcelWithImages(_ records: [CodeRecord]) -> URL? {
+    func writeExcelWithImages(
+        _ records: [CodeRecord],
+        progress: (@MainActor (Double) -> Void)? = nil
+    ) async -> URL? {
         guard !records.isEmpty else { return nil }
 
-        // One PNG slot per selected record (same order) so every row can get a QR.
-        let images: [Data?] = records.map { pngData(for: $0) }
+        let total = Double(records.count)
+        var images: [Data?] = []
+        images.reserveCapacity(records.count)
+
+        for (index, record) in records.enumerated() {
+            images.append(pngData(for: record))
+            await report(progress, Double(index + 1) / total * 0.8)
+        }
+
         do {
+            await report(progress, 0.88)
             let data = try ExcelWorkbookBuilder(
                 records: records,
                 images: images,
                 includeImages: true,
                 parser: parser
             ).build()
-            return write(data: data, named: "Quby codes with images.xlsx")
+            await report(progress, 0.95)
+            let url = write(data: data, named: "Quby codes with images.xlsx")
+            await report(progress, 1)
+            return url
         } catch {
             return nil
         }
     }
 
     /// PDF table without QR images.
-    func writePDF(_ records: [CodeRecord]) -> URL? {
-        writePDF(records, includeImages: false, named: "Quby codes.pdf")
+    func writePDF(
+        _ records: [CodeRecord],
+        progress: (@MainActor (Double) -> Void)? = nil
+    ) async -> URL? {
+        await writePDF(records, includeImages: false, named: "Quby codes.pdf", progress: progress)
     }
 
     /// PDF table with a QR thumbnail per row.
-    func writePDFWithImages(_ records: [CodeRecord]) -> URL? {
-        writePDF(records, includeImages: true, named: "Quby codes with images.pdf")
+    func writePDFWithImages(
+        _ records: [CodeRecord],
+        progress: (@MainActor (Double) -> Void)? = nil
+    ) async -> URL? {
+        await writePDF(records, includeImages: true, named: "Quby codes with images.pdf", progress: progress)
     }
 
-    private func writePDF(_ records: [CodeRecord], includeImages: Bool, named name: String) -> URL? {
+    private func writePDF(
+        _ records: [CodeRecord],
+        includeImages: Bool,
+        named name: String,
+        progress: (@MainActor (Double) -> Void)?
+    ) async -> URL? {
         guard !records.isEmpty else { return nil }
-        let images: [CGImage?] = includeImages
-            ? records.map { exportImage(for: $0) }
-            : []
+
+        var images: [CGImage?] = []
+        if includeImages {
+            let total = Double(records.count)
+            images.reserveCapacity(records.count)
+            for (index, record) in records.enumerated() {
+                images.append(exportImage(for: record))
+                await report(progress, Double(index + 1) / total * 0.8)
+            }
+        } else {
+            await report(progress, 0.2)
+        }
 
         do {
+            await report(progress, includeImages ? 0.88 : 0.55)
             let data = try PDFTableBuilder(
                 records: records,
                 images: images,
                 includeImages: includeImages,
                 parser: parser
             ).build()
-            return write(data: data, named: name)
+            await report(progress, 0.95)
+            let url = write(data: data, named: name)
+            await report(progress, 1)
+            return url
         } catch {
             return nil
         }
+    }
+
+    private func report(_ progress: (@MainActor (Double) -> Void)?, _ value: Double) async {
+        guard let progress else { return }
+        progress(min(max(value, 0), 1))
+        await Task.yield()
     }
 
     private struct RowFields {

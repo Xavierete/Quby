@@ -20,6 +20,12 @@ final class CodeRecord {
     @Attribute(.externalStorage) var styledImageData: Data?
     /// Nearby OCR from the photo/camera frame (name, place, sign text).
     var nearbyContextJSON: String = "[]"
+    /// Apple Intelligence section title; empty means not smart-organized.
+    var smartGroupTitle: String = ""
+    /// Short list title from Apple Intelligence; empty falls back to `value`.
+    var smartTitle: String = ""
+    /// Order inside a smart group (lower first).
+    var smartSortIndex: Int = 0
 
     var nearbyContext: [ScanContextField] {
         get {
@@ -55,5 +61,17 @@ final class CodeRecord {
         self.baseImageData = baseImageData
         self.styledImageData = styledImageData
         self.nearbyContext = nearbyContext
+        self.smartGroupTitle = ""
+        self.smartTitle = ""
+        self.smartSortIndex = 0
+    }
+
+    var isSmartOrganized: Bool {
+        !smartGroupTitle.isEmpty
+    }
+
+    var listTitle: String {
+        let trimmed = smartTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? value : trimmed
     }
 }

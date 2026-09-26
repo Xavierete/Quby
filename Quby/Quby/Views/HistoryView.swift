@@ -56,6 +56,8 @@ private enum HistoryTypeFilter: String, CaseIterable, Identifiable {
     }
 }
 
+private let historyExportProgressScrollID = "history-export-progress"
+
 struct HistoryView: View {
 
     @State private var favoritesFilter: HistoryFavoritesFilter = .all
@@ -103,6 +105,13 @@ private struct HistoryViewContent: View {
     @Binding var toast: String?
     @Binding var confirmDelete: Bool
     @Binding var columnVisibility: NavigationSplitViewVisibility
+
+    @State private var isExporting = false
+    @State private var exportPercent = 0
+    @State private var preparedExport: PreparedHistoryExport?
+    @State private var exportTask: Task<Void, Never>?
+    @State private var isOrganizing = false
+    @State private var organizeTask: Task<Void, Never>?
 
     private let parser = ScannedContentParser()
     private let safety = LinkSafety()
@@ -165,6 +174,47 @@ private struct HistoryViewContent: View {
         typeFilter != .all || favoritesFilter == .favoritesOnly || sortOrder != .newest
     }
 
+    private var hasSmartOrganization: Bool {
+        records.contains { $0.isSmartOrganized }
+    }
+
+    private var smartSections: [HistorySmartSection]? {
+        guard hasSmartOrganization else { return nil }
+
+        var buckets: [String: [CodeRecord]] = [:]
+        var order: [String] = []
+
+        for record in shown {
+            let key = record.isSmartOrganized ? record.smartGroupTitle : "Uncategorized"
+            if buckets[key] == nil {
+                order.append(key)
+                buckets[key] = []
+            }
+            buckets[key, default: []].append(record)
+        }
+
+        // Keep model group order; park Uncategorized at the end.
+        order.sort { lhs, rhs in
+            if lhs == "Uncategorized" { return false }
+            if rhs == "Uncategorized" { return true }
+            let left = buckets[lhs]?.map(\.smartSortIndex).min() ?? Int.max
+            let right = buckets[rhs]?.map(\.smartSortIndex).min() ?? Int.max
+            if left != right { return left < right }
+            return lhs.localizedCaseInsensitiveCompare(rhs) == .orderedAscending
+        }
+
+        return order.compactMap { title in
+            guard var items = buckets[title], !items.isEmpty else { return nil }
+            items.sort {
+                if $0.smartSortIndex != $1.smartSortIndex {
+                    return $0.smartSortIndex < $1.smartSortIndex
+                }
+                return $0.createdAt > $1.createdAt
+            }
+            return HistorySmartSection(id: title, title: title, records: items)
+        }
+    }
+
     private var selectedRecord: CodeRecord? {
         guard let selectedCodeID else { return nil }
         return records.first { $0.persistentModelID == selectedCodeID }
@@ -216,6 +266,11 @@ private struct HistoryViewContent: View {
         } message: {
             Text("This cannot be undone.")
         }
+        .historyExportShare(preparedExport: $preparedExport) {
+            withAnimation(.snappy) {
+                isExporting = false
+            }
+        }
         .onChange(of: shownIDs) { _, visibleIDs in
             Task { @MainActor in
                 if let selectedCodeID, !visibleIDs.contains(selectedCodeID) {
@@ -246,6 +301,11 @@ private struct HistoryViewContent: View {
             Button("Cancel", role: .cancel) { }
         } message: {
             Text("This cannot be undone.")
+        }
+        .historyExportShare(preparedExport: $preparedExport) {
+            withAnimation(.snappy) {
+                isExporting = false
+            }
         }
         .onChange(of: shownIDs) { _, visibleIDs in
             Task { @MainActor in
@@ -297,68 +357,128 @@ private struct HistoryViewContent: View {
     #if os(macOS)
     /// One stable `List` so Select/Done can animate like iOS EditMode (no remount).
     private var macHistoryList: some View {
-        List(selection: $selectedCodeID) {
-            ForEach(shown, id: \.persistentModelID) { record in
-                Group {
-                    if isEditing {
-                        row(for: record)
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                toggleBulkSelection(record.persistentModelID)
-                            }
-                    } else {
-                        row(for: record)
-                            .tag(record.persistentModelID)
-                    }
-                }
-                .historyRowActions(
-                    favorite: { record.isFavorite.toggle() },
-                    isFavorite: record.isFavorite,
-                    delete: { delete(record) },
-                    preferContextMenuOnly: true
-                )
+        ScrollViewReader { proxy in
+            List(selection: $selectedCodeID) {
+                exportProgressSection
+                historyRecordRows(preferContextMenuOnly: true, macBulkSelect: true)
             }
+            .id("history-mac")
+            .selectionDisabled(isEditing)
+            .animation(.snappy, value: isEditing)
+            .animation(.snappy, value: bulkSelection)
+            .animation(.snappy, value: isExporting)
+            .animation(.snappy, value: hasSmartOrganization)
+            .scrollExportProgressIntoView(proxy: proxy, isExporting: isExporting)
         }
-        .id("history-mac")
-        .selectionDisabled(isEditing)
-        .animation(.snappy, value: isEditing)
-        .animation(.snappy, value: bulkSelection)
     }
     #endif
 
     #if !os(macOS)
     private var iosHistoryList: some View {
-        if isEditing {
-            List(selection: $bulkSelection) {
-                ForEach(shown, id: \.persistentModelID) { record in
-                    row(for: record)
-                        .tag(record.persistentModelID)
-                        .historyRowActions(
-                            favorite: { record.isFavorite.toggle() },
-                            isFavorite: record.isFavorite,
-                            delete: { delete(record) },
-                            preferContextMenuOnly: false
-                        )
+        ScrollViewReader { proxy in
+            if isEditing {
+                List(selection: $bulkSelection) {
+                    exportProgressSection
+                    historyRecordRows(preferContextMenuOnly: false, macBulkSelect: false)
                 }
-            }
-            .id("history-bulk")
-        } else {
-            List(selection: $selectedCodeID) {
-                ForEach(shown, id: \.persistentModelID) { record in
-                    row(for: record)
-                        .tag(record.persistentModelID)
-                        .historyRowActions(
-                            favorite: { record.isFavorite.toggle() },
-                            isFavorite: record.isFavorite,
-                            delete: { delete(record) },
-                            preferContextMenuOnly: false
-                        )
+                .id("history-bulk")
+                .animation(.snappy, value: isExporting)
+                .animation(.snappy, value: hasSmartOrganization)
+                .scrollExportProgressIntoView(proxy: proxy, isExporting: isExporting)
+            } else {
+                List(selection: $selectedCodeID) {
+                    exportProgressSection
+                    historyRecordRows(preferContextMenuOnly: false, macBulkSelect: false)
                 }
+                .id("history-single")
+                .animation(.snappy, value: isExporting)
+                .animation(.snappy, value: hasSmartOrganization)
+                .scrollExportProgressIntoView(proxy: proxy, isExporting: isExporting)
             }
-            .id("history-single")
         }
     }
     #endif
+
+    @ViewBuilder
+    private func historyRecordRows(preferContextMenuOnly: Bool, macBulkSelect: Bool) -> some View {
+        if let sections = smartSections {
+            ForEach(sections) { section in
+                Section(section.title) {
+                    ForEach(section.records, id: \.persistentModelID) { record in
+                        historyRowEntry(
+                            for: record,
+                            preferContextMenuOnly: preferContextMenuOnly,
+                            macBulkSelect: macBulkSelect
+                        )
+                    }
+                }
+            }
+        } else {
+            ForEach(shown, id: \.persistentModelID) { record in
+                historyRowEntry(
+                    for: record,
+                    preferContextMenuOnly: preferContextMenuOnly,
+                    macBulkSelect: macBulkSelect
+                )
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func historyRowEntry(
+        for record: CodeRecord,
+        preferContextMenuOnly: Bool,
+        macBulkSelect: Bool
+    ) -> some View {
+        Group {
+            if macBulkSelect && isEditing {
+                row(for: record)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        toggleBulkSelection(record.persistentModelID)
+                    }
+            } else {
+                row(for: record)
+                    .tag(record.persistentModelID)
+            }
+        }
+        .historyRowActions(
+            favorite: { record.isFavorite.toggle() },
+            isFavorite: record.isFavorite,
+            delete: { delete(record) },
+            preferContextMenuOnly: preferContextMenuOnly
+        )
+    }
+
+    @ViewBuilder
+    private var exportProgressSection: some View {
+        if isExporting {
+            Section {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("Exporting…")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+
+                        Spacer(minLength: 8)
+
+                        Text("\(exportPercent)%")
+                            .font(.subheadline.monospacedDigit().weight(.semibold))
+                            .contentTransition(.numericText())
+                            .accessibilityLabel("\(exportPercent) percent")
+                    }
+
+                    ProgressView(value: Double(exportPercent), total: 100)
+                }
+                .padding(.vertical, 4)
+                .animation(.snappy, value: exportPercent)
+                .accessibilityElement(children: .combine)
+            }
+            .listRowInsets(EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16))
+            .transition(.move(edge: .top).combined(with: .opacity))
+            .id(historyExportProgressScrollID)
+        }
+    }
 
     @ViewBuilder
     private var historyDetail: some View {
@@ -444,12 +564,19 @@ private struct HistoryViewContent: View {
                 .frame(width: 22)
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(record.value)
+                Text(record.listTitle)
                     .lineLimit(1)
 
-                Text(record.createdAt, format: .dateTime.day().month().hour().minute())
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                if record.isSmartOrganized, record.listTitle != record.value {
+                    Text(record.value)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                } else {
+                    Text(record.createdAt, format: .dateTime.day().month().hour().minute())
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Spacer(minLength: 8)
@@ -563,24 +690,21 @@ private struct HistoryViewContent: View {
                 Label("Share as text", systemImage: "text.alignleft")
             }
 
-            ShareLink(
-                item: HistoryTextFileExport(records: selectedRecords),
-                preview: SharePreview("Quby codes.txt")
-            ) {
+            Button {
+                startExport(.textFile)
+            } label: {
                 Label("Export as text file", systemImage: "doc.text")
             }
 
             Menu {
-                ShareLink(
-                    item: HistoryCSVPackageExport(records: selectedRecords),
-                    preview: SharePreview("Quby codes.zip")
-                ) {
+                Button {
+                    startExport(.csvPackage)
+                } label: {
                     Label("With images", systemImage: "photo.on.rectangle.angled")
                 }
-                ShareLink(
-                    item: HistoryCSVExport(records: selectedRecords),
-                    preview: SharePreview("Quby codes.csv")
-                ) {
+                Button {
+                    startExport(.csv)
+                } label: {
                     Label("Without images", systemImage: "text.menu")
                 }
             } label: {
@@ -588,40 +712,35 @@ private struct HistoryViewContent: View {
             }
 
             Menu {
-                ShareLink(
-                    item: HistoryExcelExport(records: selectedRecords, withImages: true),
-                    preview: SharePreview("Quby codes with images.xlsx")
-                ) {
+                Button {
+                    startExport(.excel(withImages: true))
+                } label: {
                     Label("With embedded images", systemImage: "photo.on.rectangle.angled")
                 }
-                ShareLink(
-                    item: HistoryExcelExport(records: selectedRecords, withImages: false),
-                    preview: SharePreview("Quby codes.xlsx")
-                ) {
+                Button {
+                    startExport(.excel(withImages: false))
+                } label: {
                     Label("Without images", systemImage: "text.menu")
                 }
             } label: {
                 Label("Export as Excel", systemImage: "tablecells")
             }
 
-            ShareLink(
-                item: HistoryJSONExport(records: selectedRecords),
-                preview: SharePreview("Quby codes.json")
-            ) {
+            Button {
+                startExport(.json)
+            } label: {
                 Label("Export as JSON", systemImage: "curlybraces")
             }
 
             Menu {
-                ShareLink(
-                    item: HistoryPDFExport(records: selectedRecords, withImages: true),
-                    preview: SharePreview("Quby codes with images.pdf")
-                ) {
+                Button {
+                    startExport(.pdf(withImages: true))
+                } label: {
                     Label("With images", systemImage: "photo.on.rectangle.angled")
                 }
-                ShareLink(
-                    item: HistoryPDFExport(records: selectedRecords, withImages: false),
-                    preview: SharePreview("Quby codes.pdf")
-                ) {
+                Button {
+                    startExport(.pdf(withImages: false))
+                } label: {
                     Label("Without images", systemImage: "text.menu")
                 }
             } label: {
@@ -630,7 +749,65 @@ private struct HistoryViewContent: View {
         } label: {
             Label("Share", systemImage: "square.and.arrow.up")
         }
-        .disabled(bulkSelection.isEmpty)
+        .disabled(bulkSelection.isEmpty || isExporting)
+    }
+
+    private func startExport(_ kind: HistoryExportKind) {
+        guard !isExporting else { return }
+        let records = selectedRecords
+        guard !records.isEmpty else { return }
+
+        exportTask?.cancel()
+        withAnimation(.snappy) {
+            isExporting = true
+            exportPercent = 0
+        }
+
+        exportTask = Task { @MainActor in
+            let exporter = HistoryExporter()
+            let onProgress: @MainActor (Double) -> Void = { value in
+                let percent = Int((value * 100).rounded(.down))
+                withAnimation(.snappy) {
+                    exportPercent = min(max(percent, 0), 100)
+                }
+            }
+
+            let url: URL?
+            switch kind {
+            case .textFile:
+                url = await exporter.writeText(records, progress: onProgress)
+            case .csv:
+                url = await exporter.writeCSV(records, progress: onProgress)
+            case .csvPackage:
+                url = await exporter.writeCSVPackage(records, progress: onProgress)
+            case .excel(let withImages):
+                url = withImages
+                    ? await exporter.writeExcelWithImages(records, progress: onProgress)
+                    : await exporter.writeExcel(records, progress: onProgress)
+            case .json:
+                url = await exporter.writeJSON(records, progress: onProgress)
+            case .pdf(let withImages):
+                url = withImages
+                    ? await exporter.writePDFWithImages(records, progress: onProgress)
+                    : await exporter.writePDF(records, progress: onProgress)
+            }
+
+            guard !Task.isCancelled else { return }
+
+            if let url {
+                withAnimation(.snappy) {
+                    exportPercent = 100
+                }
+                await Task.yield()
+                // Keep the 100% row visible until the system share UI appears.
+                preparedExport = PreparedHistoryExport(url: url)
+            } else {
+                withAnimation(.snappy) {
+                    isExporting = false
+                }
+                show("Couldn't export")
+            }
+        }
     }
 
     private var filterMenu: some View {
@@ -643,6 +820,31 @@ private struct HistoryViewContent: View {
                 HistoryFavoritesSubmenu(selection: $favoritesFilter)
             }
 
+            if HistorySmartOrganizer.isAvailable {
+                Divider()
+
+                if hasSmartOrganization {
+                    Button {
+                        organizeCodesIntelligently()
+                    } label: {
+                        Label("Reorganize all codes", systemImage: "sparkles")
+                    }
+                    .disabled(records.isEmpty || isOrganizing)
+
+                    Button("Clear smart organization", role: .destructive) {
+                        clearSmartOrganization()
+                    }
+                    .disabled(isOrganizing)
+                } else {
+                    Button {
+                        organizeCodesIntelligently()
+                    } label: {
+                        Label("Organize codes intelligently", systemImage: "sparkles")
+                    }
+                    .disabled(records.isEmpty || isOrganizing)
+                }
+            }
+
             if hasNonDefaultFilters {
                 Divider()
 
@@ -653,12 +855,104 @@ private struct HistoryViewContent: View {
                 }
             }
         } label: {
-            Label("Filter", systemImage: hasNonDefaultFilters
-                  ? "line.3.horizontal.decrease.circle.fill"
-                  : "line.3.horizontal.decrease.circle")
+            Label("Filter", systemImage: filterMenuSymbol)
         }
-        .tint(hasNonDefaultFilters ? Color.accentColor : Color.primary)
+        .tint((hasNonDefaultFilters || hasSmartOrganization) ? Color.accentColor : Color.primary)
         .help("Filter and sort history")
+    }
+
+    private var filterMenuSymbol: String {
+        if isOrganizing {
+            return "sparkles"
+        }
+        if hasNonDefaultFilters || hasSmartOrganization {
+            return "line.3.horizontal.decrease.circle.fill"
+        }
+        return "line.3.horizontal.decrease.circle"
+    }
+
+    private func organizeCodesIntelligently() {
+        guard HistorySmartOrganizer.isAvailable, !isOrganizing else { return }
+
+        organizeTask?.cancel()
+        isOrganizing = true
+        show("Organizing with Apple Intelligence…")
+
+        organizeTask = Task { @MainActor in
+            do {
+                let descriptor = FetchDescriptor<CodeRecord>(
+                    sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+                )
+                let allRecords = try modelContext.fetch(descriptor)
+                guard !allRecords.isEmpty else {
+                    isOrganizing = false
+                    show("Nothing to organize")
+                    return
+                }
+
+                let inputs: [HistorySmartOrganizer.CodeInput] = allRecords.enumerated().map { index, record in
+                    let content = parser.parse(record.value)
+                    return HistorySmartOrganizer.CodeInput(
+                        id: index + 1,
+                        typeTitle: content.title,
+                        value: record.value,
+                        kind: record.kind == .created ? "created" : "scanned",
+                        nearbyHints: record.nearbyContext.map { field in
+                            field.label.isEmpty ? field.value : "\(field.label): \(field.value)"
+                        }.filter { !$0.isEmpty }
+                    )
+                }
+
+                let organization = try await HistorySmartOrganizer.organize(inputs)
+                guard !Task.isCancelled else {
+                    isOrganizing = false
+                    return
+                }
+
+                let byID = Dictionary(
+                    organization.assignments.map { ($0.id, $0) },
+                    uniquingKeysWith: { _, latest in latest }
+                )
+                for (index, record) in allRecords.enumerated() {
+                    let id = index + 1
+                    if let assignment = byID[id] {
+                        record.smartGroupTitle = assignment.groupTitle
+                        record.smartTitle = assignment.smartTitle
+                        record.smartSortIndex = index
+                    } else {
+                        record.smartGroupTitle = "Other"
+                        record.smartTitle = String(record.value.prefix(40))
+                        record.smartSortIndex = index
+                    }
+                }
+
+                try? modelContext.save()
+                withAnimation(.snappy) {
+                    isOrganizing = false
+                }
+                let groupCount = Set(organization.assignments.map(\.groupTitle)).count
+                show(groupCount == 1
+                     ? "Organized into 1 group"
+                     : "Organized into \(groupCount) groups")
+            } catch {
+                isOrganizing = false
+                show(error.localizedDescription)
+            }
+        }
+    }
+
+    private func clearSmartOrganization() {
+        organizeTask?.cancel()
+        withAnimation(.snappy) {
+            for record in records {
+                record.smartGroupTitle = ""
+                record.smartTitle = ""
+                record.smartSortIndex = 0
+            }
+            isOrganizing = false
+        }
+        try? modelContext.save()
+        show("Smart organization cleared")
     }
 
     @ViewBuilder
@@ -735,6 +1029,62 @@ private struct HistoryViewContent: View {
 
     private var sharedText: String {
         HistoryExporter().plainText(selectedRecords)
+    }
+}
+
+private enum HistoryExportKind {
+    case textFile
+    case csv
+    case csvPackage
+    case excel(withImages: Bool)
+    case json
+    case pdf(withImages: Bool)
+}
+
+private struct HistorySmartSection: Identifiable {
+    let id: String
+    let title: String
+    let records: [CodeRecord]
+}
+
+private struct PreparedHistoryExport: Identifiable {
+    let id = UUID()
+    let url: URL
+}
+
+private extension View {
+    func historyExportShare(
+        preparedExport: Binding<PreparedHistoryExport?>,
+        onSharePresented: @escaping () -> Void
+    ) -> some View {
+        background(alignment: .topTrailing) {
+            if let item = preparedExport.wrappedValue {
+                PlatformFileShareSheet(
+                    url: item.url,
+                    isPresented: Binding(
+                        get: { preparedExport.wrappedValue != nil },
+                        set: { if !$0 { preparedExport.wrappedValue = nil } }
+                    ),
+                    onPresented: onSharePresented
+                )
+                .frame(width: 1, height: 1)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+            }
+        }
+    }
+
+    func scrollExportProgressIntoView(proxy: ScrollViewProxy, isExporting: Bool) -> some View {
+        onChange(of: isExporting) { _, exporting in
+            guard exporting else { return }
+            Task { @MainActor in
+                // Let the progress section enter the list hierarchy first.
+                await Task.yield()
+                withAnimation(.snappy) {
+                    proxy.scrollTo(historyExportProgressScrollID, anchor: .top)
+                }
+            }
+        }
     }
 }
 
