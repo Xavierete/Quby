@@ -287,40 +287,61 @@ private struct HistoryViewContent: View {
 
     @ViewBuilder
     private var historyList: some View {
-        if isEditing {
-            if runsOnMac {
-                // macOS has no EditMode checkboxes — custom circles + click-to-toggle.
-                List {
-                    ForEach(shown, id: \.persistentModelID) { record in
+        #if os(macOS)
+        macHistoryList
+        #else
+        iosHistoryList
+        #endif
+    }
+
+    #if os(macOS)
+    /// One stable `List` so Select/Done can animate like iOS EditMode (no remount).
+    private var macHistoryList: some View {
+        List(selection: $selectedCodeID) {
+            ForEach(shown, id: \.persistentModelID) { record in
+                Group {
+                    if isEditing {
                         row(for: record)
                             .contentShape(Rectangle())
                             .onTapGesture {
                                 toggleBulkSelection(record.persistentModelID)
                             }
-                            .historyRowActions(
-                                favorite: { record.isFavorite.toggle() },
-                                isFavorite: record.isFavorite,
-                                delete: { delete(record) },
-                                preferContextMenuOnly: true
-                            )
-                    }
-                }
-                .id("history-bulk-mac")
-            } else {
-                List(selection: $bulkSelection) {
-                    ForEach(shown, id: \.persistentModelID) { record in
+                    } else {
                         row(for: record)
                             .tag(record.persistentModelID)
-                            .historyRowActions(
-                                favorite: { record.isFavorite.toggle() },
-                                isFavorite: record.isFavorite,
-                                delete: { delete(record) },
-                                preferContextMenuOnly: false
-                            )
                     }
                 }
-                .id("history-bulk")
+                .historyRowActions(
+                    favorite: { record.isFavorite.toggle() },
+                    isFavorite: record.isFavorite,
+                    delete: { delete(record) },
+                    preferContextMenuOnly: true
+                )
             }
+        }
+        .id("history-mac")
+        .selectionDisabled(isEditing)
+        .animation(.snappy, value: isEditing)
+        .animation(.snappy, value: bulkSelection)
+    }
+    #endif
+
+    #if !os(macOS)
+    private var iosHistoryList: some View {
+        if isEditing {
+            List(selection: $bulkSelection) {
+                ForEach(shown, id: \.persistentModelID) { record in
+                    row(for: record)
+                        .tag(record.persistentModelID)
+                        .historyRowActions(
+                            favorite: { record.isFavorite.toggle() },
+                            isFavorite: record.isFavorite,
+                            delete: { delete(record) },
+                            preferContextMenuOnly: false
+                        )
+                }
+            }
+            .id("history-bulk")
         } else {
             List(selection: $selectedCodeID) {
                 ForEach(shown, id: \.persistentModelID) { record in
@@ -330,38 +351,42 @@ private struct HistoryViewContent: View {
                             favorite: { record.isFavorite.toggle() },
                             isFavorite: record.isFavorite,
                             delete: { delete(record) },
-                            preferContextMenuOnly: runsOnMac
+                            preferContextMenuOnly: false
                         )
                 }
             }
             .id("history-single")
         }
     }
+    #endif
 
     @ViewBuilder
     private var historyDetail: some View {
-        if isEditing {
-            ContentUnavailableView(
-                "Selecting codes",
-                systemImage: "checkmark.circle",
-                description: Text(runsOnMac
-                                  ? "Click the circles in the list, then copy, share or delete."
-                                  : "Choose codes in the list, then copy, share or delete.")
-            )
-            .navigationTitle("History")
-            .toolbarTitleDisplayMode(.inline)
-        } else if let selectedRecord {
-            CodeDetailView(record: selectedRecord)
-                .id(selectedRecord.persistentModelID)
-        } else {
-            ContentUnavailableView(
-                "Select a Code",
-                systemImage: "qrcode",
-                description: Text("Choose a code from the list to see its details.")
-            )
-            .navigationTitle("Details")
-            .toolbarTitleDisplayMode(.inline)
+        Group {
+            if isEditing {
+                ContentUnavailableView(
+                    "Selecting codes",
+                    systemImage: "checkmark.circle",
+                    description: Text(runsOnMac
+                                      ? "Tap the circles in the list, then copy, share or delete."
+                                      : "Choose codes in the list, then copy, share or delete.")
+                )
+                .navigationTitle("History")
+                .toolbarTitleDisplayMode(.inline)
+            } else if let selectedRecord {
+                CodeDetailView(record: selectedRecord)
+                    .id(selectedRecord.persistentModelID)
+            } else {
+                ContentUnavailableView(
+                    "Select a Code",
+                    systemImage: "qrcode",
+                    description: Text("Choose a code from the list to see its details.")
+                )
+                .navigationTitle("Details")
+                .toolbarTitleDisplayMode(.inline)
+            }
         }
+        .animation(.snappy, value: isEditing)
     }
 
     @ViewBuilder
@@ -396,11 +421,22 @@ private struct HistoryViewContent: View {
 
         return HStack(spacing: 12) {
             if runsOnMac && isEditing {
+                // Match iOS EditMode: blue filled circle + white check (readable on any row tint).
                 Image(systemName: isBulkSelected ? "checkmark.circle.fill" : "circle")
-                    .font(.title3)
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(isBulkSelected ? Color.accentColor : Color.secondary)
+                    .font(.title2)
+                    .fontWeight(.regular)
+                    .symbolRenderingMode(.palette)
+                    .foregroundStyle(
+                        isBulkSelected ? Color.white : Color.secondary.opacity(0.45),
+                        isBulkSelected ? Color.accentColor : Color.clear
+                    )
+                    .contentTransition(.symbolEffect(.replace))
+                    .frame(width: 24, height: 24)
                     .accessibilityLabel(isBulkSelected ? "Selected" : "Not selected")
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .leading).combined(with: .opacity),
+                        removal: .move(edge: .leading).combined(with: .opacity)
+                    ))
             }
 
             Image(systemName: content.icon)
@@ -434,13 +470,18 @@ private struct HistoryViewContent: View {
                 }
             }
         }
+        .padding(.leading, runsOnMac && isEditing ? 2 : 0)
+        .animation(.snappy, value: isEditing)
+        .animation(.snappy, value: isBulkSelected)
     }
 
     private func toggleBulkSelection(_ id: PersistentIdentifier) {
-        if bulkSelection.contains(id) {
-            bulkSelection.remove(id)
-        } else {
-            bulkSelection.insert(id)
+        withAnimation(.snappy) {
+            if bulkSelection.contains(id) {
+                bulkSelection.remove(id)
+            } else {
+                bulkSelection.insert(id)
+            }
         }
     }
 
@@ -461,14 +502,15 @@ private struct HistoryViewContent: View {
 
     private var selectButton: some View {
         Button {
-            // Avoid animating the List selection-type swap — it can trap in AppKit layout.
-            if isEditing {
-                isEditing = false
-                bulkSelection.removeAll()
-            } else {
-                isEditing = true
-                bulkSelection.removeAll()
-                selectedCodeID = nil
+            withAnimation(.snappy) {
+                if isEditing {
+                    isEditing = false
+                    bulkSelection.removeAll()
+                } else {
+                    isEditing = true
+                    bulkSelection.removeAll()
+                    selectedCodeID = nil
+                }
             }
         } label: {
             if isEditing {
@@ -482,28 +524,28 @@ private struct HistoryViewContent: View {
         }
         .disabled(shown.isEmpty && !isEditing)
         .modifier(HistorySelectToolbarStyle(isDone: isEditing))
+        .animation(.snappy, value: isEditing)
     }
 
     private var deleteSelectedButton: some View {
-        #if os(macOS)
-        Button("Delete", role: .destructive) {
-            confirmDelete = true
-        }
-        .disabled(bulkSelection.isEmpty)
-        #else
         Button(role: .destructive) {
             confirmDelete = true
         } label: {
+            #if os(macOS)
+            Label("Delete", systemImage: "trash")
+            #else
             Image(systemName: "trash")
                 .fontWeight(.semibold)
                 .foregroundStyle(.white)
+            #endif
         }
+        #if !os(macOS)
         .buttonStyle(.glassProminent)
         .buttonBorderShape(.circle)
         .tint(.red)
-        .disabled(bulkSelection.isEmpty)
         .accessibilityLabel("Delete")
         #endif
+        .disabled(bulkSelection.isEmpty)
     }
 
     private var copySelectedButton: some View {
@@ -614,8 +656,8 @@ private struct HistoryViewContent: View {
             Label("Filter", systemImage: hasNonDefaultFilters
                   ? "line.3.horizontal.decrease.circle.fill"
                   : "line.3.horizontal.decrease.circle")
-            .foregroundStyle(hasNonDefaultFilters ? Color.accentColor : Color.primary)
         }
+        .tint(hasNonDefaultFilters ? Color.accentColor : Color.primary)
         .help("Filter and sort history")
     }
 
@@ -677,8 +719,10 @@ private struct HistoryViewContent: View {
     }
 
     private func finishSelecting() {
-        bulkSelection.removeAll()
-        isEditing = false
+        withAnimation(.snappy) {
+            bulkSelection.removeAll()
+            isEditing = false
+        }
     }
 
     private var deleteAlertTitle: String {
