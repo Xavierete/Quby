@@ -1,8 +1,12 @@
 # Quby
 
-Native QR app for **iPhone** and **Mac**. Create styled codes, scan from the camera or photos, keep a searchable history, and export what you need.
+Native QR app for **iPhone** and **Mac**. Create styled codes, scan from the camera or photos, keep a searchable history, and export what you need — all on-device.
 
-Built with **SwiftUI** and **SwiftData** for the **Apple Coding Hackathon**.
+Built with **SwiftUI**, **SwiftData**, and **Foundation Models** (Apple Intelligence) for the **Apple Coding Hackathon**.
+
+## What it solves
+
+Codes for Wi‑Fi, websites, contacts, and more usually end up scattered across screenshots and notes. Quby keeps scanning, creating, safety checks, and history in one place — with optional smart grouping when Apple Intelligence is available.
 
 ## Platforms
 
@@ -16,20 +20,22 @@ Open `Quby/Quby.xcodeproj` in Xcode and run the **Quby** scheme on a simulator, 
 ## Features
 
 ### Create
-- QR types: Website, Contact, Wi‑Fi, Email, SMS, Location
-- Appearance controls (colors, logo, and related styling)
-- Preview before saving to history
+- QR types: Website, Contact, Wi‑Fi, Email, SMS, Location, Text
+- Appearance controls (colors, shapes, logo)
+- Preview and share as PNG, PDF, or SVG
+- Save into History
 
 ### Scan
 - Live camera scanner
 - Decode codes from the photo library
-- Support for QR and common barcode symbologies
-- Optional nearby text context captured around a scan (OCR)
+- QR and common barcode symbologies
+- Optional nearby text context around a scan (OCR)
 
 ### History
 - Created and scanned codes in one place
-- Favorites, type filters, and sort order
-- Detail view with actions (copy, open, share, and type-specific helpers)
+- Search, favorites, type filters, and sort order
+- Detail view with actions (copy, open, share, type-specific helpers)
+- **Smart organization** (Apple Intelligence): groups codes into titled sections with short list titles; reorganize or clear anytime from Filter
 - Multi-select export:
   - Plain text
   - CSV (with or without images as a ZIP package)
@@ -37,8 +43,14 @@ Open `Quby/Quby.xcodeproj` in Xcode and run the **Quby** scheme on a simulator, 
   - JSON
   - PDF table (with or without QR thumbnails)
 
-### Settings
-- App preferences and guide
+### Safety & privacy
+- Link safety warnings (lookalike domains, unencrypted `http`, and related risks)
+- History and generated codes stay on this device
+- Smart organization runs on-device via Foundation Models when available
+
+### Settings & onboarding
+- App preferences
+- First-run guide (scan, create, smart organize, link safety, privacy)
 
 ## Project layout
 
@@ -46,18 +58,26 @@ Open `Quby/Quby.xcodeproj` in Xcode and run the **Quby** scheme on a simulator, 
 Quby/
 ├── README.md
 └── Quby/
+    ├── Launch Screen.storyboard
     ├── Quby.xcodeproj
     └── Quby/
         ├── Models/
         ├── Services/
+        │   ├── Intelligence/   # Foundation Models (smart History organize)
+        │   ├── Creating/
+        │   ├── Scanning/
+        │   ├── Results/
+        │   └── System/
         ├── ViewModels/
-        └── Views/
+        ├── Views/
+        └── QubyIcon.icon
 ```
 
 ## Requirements
 
 - Xcode with the matching SDKs for the deployment targets above
 - Camera / Photos permissions when using scan features
+- Apple Intelligence–capable device (optional) for smart History organization
 
 ## Team
 
