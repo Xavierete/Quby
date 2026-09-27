@@ -3,10 +3,15 @@ import SwiftUI
 #if os(iOS)
 import UIKit
 
-/// Hosts and presents the system share sheet (`UIActivityViewController`).
+/// Presents the system share sheet on iOS (`UIActivityViewController`).
+///
+/// Hosted as a zero-size background view so History can finish building a file,
+/// keep the export progress UI at 100%, then hand off to the native share UI.
+/// `onPresented` fires once the sheet is up so callers can hide progress.
 struct PlatformFileShareSheet: UIViewControllerRepresentable {
     let url: URL
     @Binding var isPresented: Bool
+    /// Called right after the activity controller is presented.
     var onPresented: (() -> Void)? = nil
 
     func makeUIViewController(context: Context) -> UIViewController {
@@ -17,6 +22,7 @@ struct PlatformFileShareSheet: UIViewControllerRepresentable {
         context.coordinator.onPresented = onPresented
 
         if isPresented {
+            // Avoid presenting twice for the same URL.
             guard controller.presentedViewController == nil,
                   context.coordinator.presentedURL != url else { return }
 
@@ -31,6 +37,7 @@ struct PlatformFileShareSheet: UIViewControllerRepresentable {
                 }
             }
 
+            // Required on iPad so the popover has a source rect.
             if let popover = activity.popoverPresentationController {
                 popover.sourceView = controller.view
                 popover.sourceRect = CGRect(
@@ -69,12 +76,14 @@ struct PlatformFileShareSheet: UIViewControllerRepresentable {
 #elseif os(macOS)
 import AppKit
 
-/// Presents the system sharing picker (`NSSharingServicePicker`).
-/// The picker must be retained for the duration of the menu, and anchored to a
-/// real window view — a zero-size SwiftUI background host is unreliable on Mac.
+/// Presents the system sharing picker on Mac (`NSSharingServicePicker`).
+///
+/// The picker must be retained while visible, and anchored to a real window view —
+/// a zero-size SwiftUI-only host often fails silently on macOS.
 struct PlatformFileShareSheet: NSViewRepresentable {
     let url: URL
     @Binding var isPresented: Bool
+    /// Called right after the sharing picker menu is shown.
     var onPresented: (() -> Void)? = nil
 
     func makeNSView(context: Context) -> NSView {
@@ -107,7 +116,7 @@ struct PlatformFileShareSheet: NSViewRepresentable {
         @Binding var isPresented: Bool
         var presentedURL: URL?
         var onPresented: (() -> Void)?
-        /// Keep the picker alive while the menu is visible.
+        /// Strong reference — releasing early dismisses the menu immediately.
         var picker: NSSharingServicePicker?
 
         init(isPresented: Binding<Bool>, onPresented: (() -> Void)?) {

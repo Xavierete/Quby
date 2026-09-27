@@ -5,24 +5,33 @@ import FoundationModels
 #endif
 
 /// On-device Apple Intelligence organizer for History (Foundation Models).
-/// Groups QR/barcode records into named sections with short smart titles.
+///
+/// Flow:
+/// 1. Check `isAvailable` (device supports Apple Intelligence + model ready).
+/// 2. Convert SwiftData records into numbered `CodeInput` snapshots.
+/// 3. Ask the system language model for grouped sections + short row titles.
+/// 4. Map the structured `@Generable` result back onto each `CodeRecord`.
 enum HistorySmartOrganizer {
 
-    /// Snapshot passed into the model (Sendable, no SwiftData).
+    /// Plain snapshot sent to the model (Sendable; no SwiftData / MainActor types).
     struct CodeInput: Sendable {
+        /// 1-based id the model must echo back exactly.
         let id: Int
         let typeTitle: String
         let value: String
         let kind: String
+        /// Optional OCR / nearby context hints from the scan frame.
         let nearbyHints: [String]
     }
 
+    /// One code placed into a named group with a display title.
     struct CodeAssignment: Sendable {
         let id: Int
         let groupTitle: String
         let smartTitle: String
     }
 
+    /// Full organization result for the requested batch.
     struct Organization: Sendable {
         let assignments: [CodeAssignment]
     }
@@ -44,7 +53,7 @@ enum HistorySmartOrganizer {
         }
     }
 
-    /// `true` only when the system on-device model is ready (Apple Intelligence).
+    /// `true` only when the system on-device model is ready to run.
     static var isAvailable: Bool {
         #if canImport(FoundationModels)
         SystemLanguageModel.default.isAvailable
@@ -53,6 +62,8 @@ enum HistorySmartOrganizer {
         #endif
     }
 
+    /// Organizes codes into groups. Large lists are split into chunks so each
+    /// prompt stays within the on-device context window.
     static func organize(_ codes: [CodeInput]) async throws -> Organization {
         guard isAvailable else { throw OrganizerError.unavailable }
         guard !codes.isEmpty else { throw OrganizerError.empty }
@@ -68,6 +79,7 @@ enum HistorySmartOrganizer {
             assignments.append(contentsOf: partial)
         }
 
+        // Every input id must appear exactly once across all chunk results.
         let expected = Set(codes.map(\.id))
         let got = Set(assignments.map(\.id))
         guard expected == got else { throw OrganizerError.incomplete }
@@ -78,6 +90,10 @@ enum HistorySmartOrganizer {
     }
 
     #if canImport(FoundationModels)
+    // MARK: - Guided generation schema
+    // `@Generable` + `@Guide` tell Foundation Models the exact Swift shape to return
+    // (no brittle hand-parsed JSON).
+
     @Generable(description: "Smart grouping of QR and barcode history items.")
     struct ModelResult {
         @Guide(description: "Named groups of related codes. Use short, clear titles.")
@@ -102,6 +118,7 @@ enum HistorySmartOrganizer {
         var title: String
     }
 
+    /// Runs one LanguageModelSession for a chunk and normalizes the output.
     private static func organizeChunk(_ codes: [CodeInput]) async throws -> [CodeAssignment] {
         let session = LanguageModelSession(
             model: .default,
@@ -115,6 +132,7 @@ enum HistorySmartOrganizer {
             """
         )
 
+        // Numbered listing the model uses as the source of truth for ids.
         let listing = codes.map { code in
             var line = "\(code.id). [\(code.typeTitle) · \(code.kind)] \(code.value)"
             if !code.nearbyHints.isEmpty {
@@ -141,6 +159,7 @@ enum HistorySmartOrganizer {
 
         for group in response.content.groups {
             let groupTitle = cleanedTitle(group.title, fallback: "Other")
+            // Ignore any ids the model invents outside this chunk.
             for item in group.codes where allowed.contains(item.id) {
                 assignments.append(
                     CodeAssignment(

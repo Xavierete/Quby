@@ -6,6 +6,7 @@ enum CodeKind: String, Codable {
     case created
 }
 
+/// Persistent QR / barcode entry shown in History (and created from Scan / Create).
 @Model
 final class CodeRecord {
 
@@ -18,15 +19,18 @@ final class CodeRecord {
     @Attribute(.externalStorage) var baseImageData: Data?
     /// Styled look from Create (palette, shape, logo).
     @Attribute(.externalStorage) var styledImageData: Data?
-    /// Nearby OCR from the photo/camera frame (name, place, sign text).
+    /// Nearby OCR from the photo/camera frame (name, place, sign text), stored as JSON.
     var nearbyContextJSON: String = "[]"
-    /// Apple Intelligence section title; empty means not smart-organized.
+
+    // MARK: - Apple Intelligence organization (HistorySmartOrganizer)
+    /// Section title from smart organize; empty means not organized yet.
     var smartGroupTitle: String = ""
-    /// Short list title from Apple Intelligence; empty falls back to `value`.
+    /// Short list title from smart organize; empty falls back to raw `value`.
     var smartTitle: String = ""
-    /// Order inside a smart group (lower first).
+    /// Stable order inside a smart group (lower first).
     var smartSortIndex: Int = 0
 
+    /// Decoded nearby OCR fields (backed by `nearbyContextJSON`).
     var nearbyContext: [ScanContextField] {
         get {
             guard let data = nearbyContextJSON.data(using: .utf8),
@@ -66,10 +70,12 @@ final class CodeRecord {
         self.smartSortIndex = 0
     }
 
+    /// Whether this row belongs to a smart-organized section.
     var isSmartOrganized: Bool {
         !smartGroupTitle.isEmpty
     }
 
+    /// Preferred History row title (smart title when present).
     var listTitle: String {
         let trimmed = smartTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? value : trimmed

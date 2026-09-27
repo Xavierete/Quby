@@ -1,5 +1,6 @@
 import SwiftUI
 
+/// One page in the first-run / Settings guide carousel.
 struct GuideSlide: Identifiable {
     let id: Int
     let icon: String
@@ -18,6 +19,7 @@ struct GuideView: View {
     var markSeenOnFinish: Bool = false
     var onFinish: (() -> Void)? = nil
 
+    /// Ordered onboarding pages (scan → create → smart organize → safety → privacy).
     private let slides: [GuideSlide] = [
         GuideSlide(
             id: 0,

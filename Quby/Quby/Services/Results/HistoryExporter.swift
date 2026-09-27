@@ -2,6 +2,10 @@ import CoreGraphics
 import Foundation
 import ImageIO
 
+/// Builds shareable History exports (text, CSV/ZIP, Excel, JSON, PDF).
+///
+/// Heavy formats report progress via an optional MainActor callback (0…1) so the
+/// History list can show a determinate bar while images / workbooks are prepared.
 struct HistoryExporter {
 
     private let generator = QRCodeGenerator()
@@ -239,6 +243,7 @@ struct HistoryExporter {
         }
     }
 
+    /// Pushes a progress sample to the UI and yields so SwiftUI can paint between steps.
     private func report(_ progress: (@MainActor (Double) -> Void)?, _ value: Double) async {
         guard let progress else { return }
         progress(min(max(value, 0), 1))

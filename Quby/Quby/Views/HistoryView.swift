@@ -1,6 +1,8 @@
 import SwiftUI
 import SwiftData
 
+// MARK: - History filters
+
 private enum HistoryFavoritesFilter: String, CaseIterable, Identifiable {
     case all, favoritesOnly
 
@@ -58,6 +60,8 @@ private enum HistoryTypeFilter: String, CaseIterable, Identifiable {
 
 private let historyExportProgressScrollID = "history-export-progress"
 
+/// History tab shell. Filter / sort state lives here so SwiftData `#Predicate`
+/// queries can be rebuilt when favorites or sort order change.
 struct HistoryView: View {
 
     @State private var favoritesFilter: HistoryFavoritesFilter = .all
@@ -106,12 +110,15 @@ private struct HistoryViewContent: View {
     @Binding var confirmDelete: Bool
     @Binding var columnVisibility: NavigationSplitViewVisibility
 
+    // Export: build file with progress UI, then present the system share sheet.
     @State private var isExporting = false
     @State private var exportPercent = 0
     @State private var preparedExport: PreparedHistoryExport?
     @State private var exportTask: Task<Void, Never>?
+    // Apple Intelligence organization of the list into titled sections.
     @State private var isOrganizing = false
     @State private var organizeTask: Task<Void, Never>?
+    /// Bumped after organize / clear so the list can animate the new section layout.
     @State private var smartLayoutEpoch = 0
 
     private let parser = ScannedContentParser()
@@ -179,6 +186,8 @@ private struct HistoryViewContent: View {
         records.contains { $0.isSmartOrganized }
     }
 
+    /// When smart organization is active, maps the filtered list into titled sections.
+    /// Codes added after organizing land in "Uncategorized" until the next run.
     private var smartSections: [HistorySmartSection]? {
         guard hasSmartOrganization else { return nil }
 
@@ -368,6 +377,8 @@ private struct HistoryViewContent: View {
             // Don't animate the whole list on Select — only the leading circles move.
             .animation(nil, value: isEditing)
             .animation(nil, value: bulkSelection)
+            // Animate rows inserting/removing when filtering, searching, or deleting.
+            .animation(.snappy, value: shownIDs)
             .animation(.snappy, value: isExporting)
             .animation(.smooth(duration: 0.55), value: smartLayoutEpoch)
             .scrollExportProgressIntoView(proxy: proxy, isExporting: isExporting)
@@ -376,33 +387,50 @@ private struct HistoryViewContent: View {
     #endif
 
     #if !os(macOS)
+    /// One stable `List` so EditMode can animate selection controls in/out.
     private var iosHistoryList: some View {
         ScrollViewReader { proxy in
-            if isEditing {
-                List(selection: $bulkSelection) {
-                    exportProgressSection
-                    historyRecordRows(preferContextMenuOnly: false, macBulkSelect: false)
-                }
-                .id("history-bulk")
-                .animation(.snappy, value: isExporting)
-                .animation(.smooth(duration: 0.55), value: smartLayoutEpoch)
-                .scrollExportProgressIntoView(proxy: proxy, isExporting: isExporting)
-            } else {
-                List(selection: $selectedCodeID) {
-                    exportProgressSection
-                    historyRecordRows(preferContextMenuOnly: false, macBulkSelect: false)
-                }
-                .id("history-single")
-                .animation(.snappy, value: isExporting)
-                .animation(.smooth(duration: 0.55), value: smartLayoutEpoch)
-                .scrollExportProgressIntoView(proxy: proxy, isExporting: isExporting)
+            List(selection: iosListSelection) {
+                exportProgressSection
+                historyRecordRows(preferContextMenuOnly: false, macBulkSelect: false)
             }
+            .id("history-ios")
+            .animation(.snappy, value: isEditing)
+            // Animate rows inserting/removing when filtering, searching, or deleting.
+            .animation(.snappy, value: shownIDs)
+            .animation(.snappy, value: isExporting)
+            .animation(.smooth(duration: 0.55), value: smartLayoutEpoch)
+            .scrollExportProgressIntoView(proxy: proxy, isExporting: isExporting)
         }
+    }
+
+    /// Bridges split-view single selection and bulk EditMode selection without remounting the list.
+    private var iosListSelection: Binding<Set<PersistentIdentifier>> {
+        Binding(
+            get: {
+                if isEditing {
+                    return bulkSelection
+                }
+                if let selectedCodeID {
+                    return [selectedCodeID]
+                }
+                return []
+            },
+            set: { newValue in
+                if isEditing {
+                    bulkSelection = newValue
+                } else {
+                    selectedCodeID = newValue.first
+                }
+            }
+        )
     }
     #endif
 
     @ViewBuilder
     private func historyRecordRows(preferContextMenuOnly: Bool, macBulkSelect: Bool) -> some View {
+        // Prefer smart sections when Apple Intelligence has organized the store;
+        // otherwise fall back to a flat chronological list.
         if let sections = smartSections {
             ForEach(sections) { section in
                 Section(section.title) {
@@ -448,6 +476,7 @@ private struct HistoryViewContent: View {
 
     @ViewBuilder
     private var exportProgressSection: some View {
+        // Shown at the top of the list only while a file export is running.
         if isExporting {
             Section {
                 VStack(alignment: .leading, spacing: 10) {
@@ -538,7 +567,7 @@ private struct HistoryViewContent: View {
         return HStack(spacing: 12) {
             if runsOnMac {
                 // Keep the circle in the hierarchy so Select only slides this control,
-                // instead of remounting every row.
+                // instead of remounting every row (Mac has no UIKit EditMode).
                 Image(systemName: isBulkSelected ? "checkmark.circle.fill" : "circle")
                     .font(.title2)
                     .fontWeight(.regular)
@@ -626,7 +655,8 @@ private struct HistoryViewContent: View {
 
     private var selectButton: some View {
         Button {
-            // Animate only the Select circles; clear selection without list churn.
+            #if os(macOS)
+            // Mac: only animate the leading circles; avoid list-wide churn.
             var clear = Transaction()
             clear.disablesAnimations = true
             withTransaction(clear) {
@@ -638,6 +668,19 @@ private struct HistoryViewContent: View {
             withAnimation(.snappy(duration: 0.28)) {
                 isEditing.toggle()
             }
+            #else
+            // iOS: animate EditMode so selection controls slide in/out on the same list.
+            withAnimation(.snappy) {
+                if isEditing {
+                    isEditing = false
+                    bulkSelection.removeAll()
+                } else {
+                    isEditing = true
+                    bulkSelection.removeAll()
+                    selectedCodeID = nil
+                }
+            }
+            #endif
         } label: {
             if isEditing {
                 Image(systemName: "checkmark")
@@ -684,6 +727,7 @@ private struct HistoryViewContent: View {
     }
 
     private var shareSelectedButton: some View {
+        // Plain text uses ShareLink immediately; file formats build async with progress first.
         Menu {
             ShareLink(item: sharedText) {
                 Label("Share as text", systemImage: "text.alignleft")
@@ -752,6 +796,8 @@ private struct HistoryViewContent: View {
     }
 
     private func startExport(_ kind: HistoryExportKind) {
+        // Builds the export file off the share menu, reports progress in the list,
+        // then presents the native share UI when the URL is ready.
         guard !isExporting else { return }
         let records = selectedRecords
         guard !records.isEmpty else { return }
@@ -810,6 +856,7 @@ private struct HistoryViewContent: View {
     }
 
     private var filterMenu: some View {
+        // Type / sort / favorites plus optional Apple Intelligence organize actions.
         Menu {
             if runsOnMac {
                 macFilterSections
@@ -871,6 +918,7 @@ private struct HistoryViewContent: View {
     }
 
     private func organizeCodesIntelligently() {
+        // Runs Foundation Models on-device, then writes group/title fields onto each CodeRecord.
         guard HistorySmartOrganizer.isAvailable, !isOrganizing else { return }
 
         organizeTask?.cancel()
@@ -942,6 +990,7 @@ private struct HistoryViewContent: View {
     }
 
     private func clearSmartOrganization() {
+        // Removes AI section titles so History returns to a flat list.
         organizeTask?.cancel()
         withAnimation(.smooth(duration: 0.45)) {
             for record in records {
@@ -984,21 +1033,25 @@ private struct HistoryViewContent: View {
     }
 
     private func delete(_ record: CodeRecord) {
-        let id = record.persistentModelID
-        if selectedCodeID == id { selectedCodeID = nil }
-        bulkSelection.remove(id)
-        modelContext.delete(record)
+        withAnimation(.snappy) {
+            let id = record.persistentModelID
+            if selectedCodeID == id { selectedCodeID = nil }
+            bulkSelection.remove(id)
+            modelContext.delete(record)
+        }
     }
 
     private func deleteSelected() {
-        let doomed = selectedRecords
-        let doomedIDs = Set(doomed.map(\.persistentModelID))
-        if let selectedCodeID, doomedIDs.contains(selectedCodeID) {
-            self.selectedCodeID = nil
-        }
-        bulkSelection.subtract(doomedIDs)
-        for record in doomed {
-            modelContext.delete(record)
+        withAnimation(.snappy) {
+            let doomed = selectedRecords
+            let doomedIDs = Set(doomed.map(\.persistentModelID))
+            if let selectedCodeID, doomedIDs.contains(selectedCodeID) {
+                self.selectedCodeID = nil
+            }
+            bulkSelection.subtract(doomedIDs)
+            for record in doomed {
+                modelContext.delete(record)
+            }
         }
     }
 
@@ -1048,7 +1101,7 @@ private struct HistorySmartSection: Identifiable {
     let records: [CodeRecord]
 }
 
-/// Enables bulk tap only while Select is active, without remounting the row body.
+/// Enables bulk tap only while Select is active on Mac, without remounting the row body.
 private struct HistoryMacBulkSelectModifier: ViewModifier {
     let isEnabled: Bool
     let action: () -> Void
@@ -1071,6 +1124,8 @@ private struct PreparedHistoryExport: Identifiable {
 }
 
 private extension View {
+    /// Hosts `PlatformFileShareSheet` once an export URL is ready.
+    /// `onSharePresented` dismisses the list progress bar when the native share UI appears.
     func historyExportShare(
         preparedExport: Binding<PreparedHistoryExport?>,
         onSharePresented: @escaping () -> Void
@@ -1092,6 +1147,7 @@ private extension View {
         }
     }
 
+    /// Scrolls to the export progress row when an export starts (if the user was mid-list).
     func scrollExportProgressIntoView(proxy: ScrollViewProxy, isExporting: Bool) -> some View {
         onChange(of: isExporting) { _, exporting in
             guard exporting else { return }
