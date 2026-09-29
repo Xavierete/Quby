@@ -1124,26 +1124,27 @@ private struct PreparedHistoryExport: Identifiable {
 }
 
 private extension View {
-    /// Hosts `PlatformFileShareSheet` once an export URL is ready.
-    /// `onSharePresented` dismisses the list progress bar when the native share UI appears.
+    /// Presents the system share UI once an export URL is ready.
+    /// `onSharePresented` dismisses the list progress bar when share appears.
     func historyExportShare(
         preparedExport: Binding<PreparedHistoryExport?>,
         onSharePresented: @escaping () -> Void
     ) -> some View {
-        background(alignment: .topTrailing) {
-            if let item = preparedExport.wrappedValue {
-                PlatformFileShareSheet(
-                    url: item.url,
-                    isPresented: Binding(
-                        get: { preparedExport.wrappedValue != nil },
-                        set: { if !$0 { preparedExport.wrappedValue = nil } }
-                    ),
-                    onPresented: onSharePresented
-                )
-                .frame(width: 1, height: 1)
-                .allowsHitTesting(false)
-                .accessibilityHidden(true)
-            }
+        // Keep a stable host in the tree so hiding export progress does not remount
+        // the representable and present a second share sheet.
+        background(alignment: .bottom) {
+            PlatformFileShareSheet(
+                url: preparedExport.wrappedValue?.url,
+                isPresented: Binding(
+                    get: { preparedExport.wrappedValue != nil },
+                    set: { if !$0 { preparedExport.wrappedValue = nil } }
+                ),
+                onPresented: onSharePresented
+            )
+            .frame(width: 1, height: 1)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+            .id("history-file-share-host")
         }
     }
 

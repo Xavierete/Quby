@@ -3,16 +3,19 @@ import SwiftUI
 #if os(iOS)
 import UIKit
 
-/// Presents the system share sheet on iOS (`UIActivityViewController`).
+/// Presents the system share sheet on iOS (`UIActivityViewController`) from the
+/// topmost visible view controller so it rises as a native bottom sheet.
 ///
-/// Hosted as a zero-size background view so History can finish building a file,
-/// keep the export progress UI at 100%, then hand off to the native share UI.
-/// `onPresented` fires once the sheet is up so callers can hide progress.
+/// Presents at most once per URL until the user dismisses the sheet — parent
+/// re-renders (e.g. hiding export progress) must not open a second copy.
 struct PlatformFileShareSheet: UIViewControllerRepresentable {
-    let url: URL
+    let url: URL?
     @Binding var isPresented: Bool
-    /// Called right after the activity controller is presented.
+    /// Called once the share sheet has been presented.
     var onPresented: (() -> Void)? = nil
+
+    /// Survives representable remounts so a second sheet cannot open for the same file.
+    private static var lockedURL: URL?
 
     func makeUIViewController(context: Context) -> UIViewController {
         UIViewController()
@@ -20,40 +23,60 @@ struct PlatformFileShareSheet: UIViewControllerRepresentable {
 
     func updateUIViewController(_ controller: UIViewController, context: Context) {
         context.coordinator.onPresented = onPresented
+        context.coordinator.isPresented = $isPresented
 
-        if isPresented {
-            // Avoid presenting twice for the same URL.
-            guard controller.presentedViewController == nil,
-                  context.coordinator.presentedURL != url else { return }
+        guard isPresented, let url else { return }
 
-            context.coordinator.presentedURL = url
+        // Already presented (or presenting) this file — ignore parent re-renders.
+        if context.coordinator.activeURL == url { return }
+        if context.coordinator.isPresenting { return }
+        if Self.lockedURL == url { return }
 
-            let coordinator = context.coordinator
-            let activity = UIActivityViewController(activityItems: [url], applicationActivities: nil)
-            activity.completionWithItemsHandler = { _, _, _, _ in
-                Task { @MainActor in
-                    coordinator.presentedURL = nil
-                    coordinator.isPresented = false
-                }
+        let presenter = topMostViewController(from: controller) ?? controller
+        // Another share sheet is already on screen.
+        if presenter.presentedViewController is UIActivityViewController { return }
+
+        Self.lockedURL = url
+        context.coordinator.activeURL = url
+        context.coordinator.isPresenting = true
+
+        let coordinator = context.coordinator
+        let activity = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+        activity.completionWithItemsHandler = { _, _, _, _ in
+            Task { @MainActor in
+                Self.lockedURL = nil
+                coordinator.activeURL = nil
+                coordinator.isPresenting = false
+                coordinator.isPresented.wrappedValue = false
             }
+        }
 
-            // Required on iPad so the popover has a source rect.
-            if let popover = activity.popoverPresentationController {
-                popover.sourceView = controller.view
-                popover.sourceRect = CGRect(
-                    x: controller.view.bounds.midX,
-                    y: controller.view.bounds.minY + 8,
-                    width: 1,
-                    height: 1
-                )
-                popover.permittedArrowDirections = []
+        if UIDevice.current.userInterfaceIdiom == .pad,
+           let popover = activity.popoverPresentationController {
+            let view = presenter.view!
+            popover.sourceView = view
+            popover.sourceRect = CGRect(
+                x: view.bounds.midX,
+                y: view.bounds.maxY - 24,
+                width: 1,
+                height: 1
+            )
+            popover.permittedArrowDirections = []
+        }
+
+        DispatchQueue.main.async {
+            guard Self.lockedURL == url else { return }
+            // Already showing a share sheet — keep the lock until that one dismisses.
+            if presenter.presentedViewController is UIActivityViewController { return }
+            guard presenter.presentedViewController == nil else {
+                Self.lockedURL = nil
+                coordinator.activeURL = nil
+                coordinator.isPresenting = false
+                return
             }
-
-            controller.present(activity, animated: true)
-            coordinator.onPresented?()
-        } else if controller.presentedViewController != nil {
-            controller.dismiss(animated: true)
-            context.coordinator.presentedURL = nil
+            presenter.present(activity, animated: true) {
+                coordinator.onPresented?()
+            }
         }
     }
 
@@ -61,13 +84,33 @@ struct PlatformFileShareSheet: UIViewControllerRepresentable {
         Coordinator(isPresented: $isPresented, onPresented: onPresented)
     }
 
+    /// Walks up from any VC to the frontmost presented controller in its window.
+    private func topMostViewController(from start: UIViewController) -> UIViewController? {
+        var root = start
+        if let window = start.view.window {
+            root = window.rootViewController ?? start
+        } else if let scene = UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene })
+            .first(where: { $0.activationState == .foregroundActive }),
+           let key = scene.windows.first(where: \.isKeyWindow) {
+            root = key.rootViewController ?? start
+        }
+
+        var top = root
+        while let presented = top.presentedViewController {
+            top = presented
+        }
+        return top
+    }
+
     final class Coordinator {
-        @Binding var isPresented: Bool
-        var presentedURL: URL?
+        var isPresented: Binding<Bool>
+        var activeURL: URL?
         var onPresented: (() -> Void)?
+        var isPresenting = false
 
         init(isPresented: Binding<Bool>, onPresented: (() -> Void)?) {
-            _isPresented = isPresented
+            self.isPresented = isPresented
             self.onPresented = onPresented
         }
     }
@@ -81,7 +124,7 @@ import AppKit
 /// The picker must be retained while visible, and anchored to a real window view —
 /// a zero-size SwiftUI-only host often fails silently on macOS.
 struct PlatformFileShareSheet: NSViewRepresentable {
-    let url: URL
+    let url: URL?
     @Binding var isPresented: Bool
     /// Called right after the sharing picker menu is shown.
     var onPresented: (() -> Void)? = nil
@@ -95,14 +138,13 @@ struct PlatformFileShareSheet: NSViewRepresentable {
     func updateNSView(_ nsView: NSView, context: Context) {
         context.coordinator.onPresented = onPresented
 
-        guard isPresented else {
+        guard isPresented, let url else {
             context.coordinator.clear()
             return
         }
         guard context.coordinator.presentedURL != url else { return }
         context.coordinator.presentedURL = url
 
-        // Defer so the host is in a window hierarchy before showing the picker.
         DispatchQueue.main.async {
             context.coordinator.present(url: url, from: nsView)
         }
@@ -125,6 +167,8 @@ struct PlatformFileShareSheet: NSViewRepresentable {
         }
 
         func present(url: URL, from host: NSView) {
+            guard picker == nil else { return }
+
             let picker = NSSharingServicePicker(items: [url])
             picker.delegate = self
             self.picker = picker
@@ -134,7 +178,6 @@ struct PlatformFileShareSheet: NSViewRepresentable {
             if anchor === host {
                 rect = host.bounds
             } else {
-                // Near the trailing/top toolbar area — visible and hittable.
                 rect = NSRect(
                     x: anchor.bounds.maxX - 36,
                     y: anchor.bounds.maxY - 36,
